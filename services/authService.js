@@ -641,6 +641,20 @@ class AuthService {
         throw new Error('Both phone number and email are required');
       }
 
+      // Validate phone number format
+      const phoneRegex = /^\+[1-9]\d{1,14}$/;
+      if (!phoneRegex.test(phoneNumber)) {
+        throw new Error('Invalid phone number format. Use international format: +1234567890');
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        throw new Error('Invalid email format');
+      }
+
+      console.log(`🚀 Starting verification session for phone: ${phoneNumber}, email: ${email}`);
+
       const sessionId = uuidv4();
       const sessionData = {
         sessionId,
@@ -664,6 +678,8 @@ class AuthService {
         sessionId,
         phoneNumber,
         email,
+        phoneVerified: false,
+        emailVerified: false,
         expiresAt: sessionData.expiresAt,
         message: 'Verification session created. Please verify both phone and email.'
       };
