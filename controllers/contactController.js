@@ -93,7 +93,31 @@ class ContactController {
         offset: parseInt(offset) || 0
       };
 
-      const contacts = await Contact.getUserContacts(userId, options);
+      const rawContacts = await Contact.getUserContacts(userId, options);
+
+      // Format the response to be more user-friendly
+      const contacts = rawContacts.map(contact => ({
+        id: contact.contact_id,
+        // Friend's information (what the user wants to see)
+        friend: {
+          id: contact.linked_user_id,
+          phoneNumber: contact.linked_user_phone,
+          email: contact.linked_user_email,
+          firstName: contact.linked_user_first_name,
+          lastName: contact.linked_user_last_name,
+          fullName: [contact.linked_user_first_name, contact.linked_user_last_name]
+            .filter(Boolean).join(' ') || 'Unknown Contact',
+          avatar: contact.linked_user_avatar
+        },
+        // Contact relationship data
+        isFavorite: contact.is_favorite,
+        lastInteraction: contact.last_interaction,
+        addedAt: contact.contact_created_at,
+        // Internal data (for API operations) - can be removed if not needed
+        _internal: {
+          phoneHash: contact.phone_hash // Hidden from main view but available if needed
+        }
+      }));
 
       return BaseResponse.success(
         res,
@@ -127,11 +151,35 @@ class ContactController {
     try {
       const userId = req.user.id;
 
-      const favorites = await Contact.getFavoriteContacts(userId);
+      const rawFavorites = await Contact.getFavoriteContacts(userId);
+
+      // Format the response consistently
+      const contacts = rawFavorites.map(contact => ({
+        id: contact.id,
+        // Friend's information (what the user wants to see)
+        friend: {
+          id: contact.linked_user_id,
+          phoneNumber: contact.phone,
+          email: contact.email,
+          firstName: contact.first_name,
+          lastName: contact.last_name,
+          fullName: [contact.first_name, contact.last_name]
+            .filter(Boolean).join(' ') || 'Unknown Contact',
+          avatar: contact.avatar
+        },
+        // Contact relationship data
+        isFavorite: true, // All are favorites in this endpoint
+        lastInteraction: contact.last_interaction,
+        addedAt: contact.created_at,
+        // Internal data (for API operations)
+        _internal: {
+          phoneHash: contact.phone_hash
+        }
+      }));
 
       return BaseResponse.success(
         res,
-        { contacts: favorites },
+        { contacts },
         'Favorite contacts retrieved successfully'
       );
     } catch (error) {
@@ -297,7 +345,33 @@ class ContactController {
         offset: parseInt(offset) || 0
       };
 
-      const contacts = await Contact.searchContacts(userId, searchTerm.trim(), options);
+      const rawContacts = await Contact.searchContacts(userId, searchTerm.trim(), options);
+
+      // Format the response consistently with getContacts
+      const contacts = rawContacts.map(contact => ({
+        id: contact.id,
+        // Friend's information (what the user wants to see)
+        friend: {
+          id: contact.linked_user_id,
+          phoneNumber: contact.users?.phone_number,
+          email: contact.users?.email,
+          firstName: contact.users?.user_profiles?.first_name,
+          lastName: contact.users?.user_profiles?.last_name,
+          fullName: [
+            contact.users?.user_profiles?.first_name, 
+            contact.users?.user_profiles?.last_name
+          ].filter(Boolean).join(' ') || 'Unknown Contact',
+          avatar: contact.users?.user_profiles?.avatar_url
+        },
+        // Contact relationship data
+        isFavorite: contact.is_favorite,
+        lastInteraction: contact.last_interaction,
+        addedAt: contact.created_at,
+        // Internal data (for API operations)
+        _internal: {
+          phoneHash: contact.phone_hash
+        }
+      }));
 
       return BaseResponse.success(
         res,
