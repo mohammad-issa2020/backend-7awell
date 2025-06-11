@@ -726,23 +726,44 @@ class AuthService {
       let otpResult;
       console.log(`📱 Sending OTP to ${medium}:${value} via ${channel} for session ${sessionId}`);
 
-      if (medium === 'phone') {
-        if (channel === 'whatsapp') {
-          otpResult = await stytchClient.otps.whatsapp.send({
-            phone_number: value,
-            expiration_minutes: 5
-          });
-        } else {
-          otpResult = await stytchClient.otps.sms.send({
-            phone_number: value,
+      try {
+        if (medium === 'phone') {
+          if (channel === 'whatsapp') {
+            otpResult = await stytchClient.otps.whatsapp.loginOrCreate({
+              phone_number: value,
+              expiration_minutes: 5
+            });
+          } else {
+            otpResult = await stytchClient.otps.sms.loginOrCreate({
+              phone_number: value,
+              expiration_minutes: 5
+            });
+          }
+        } else if (medium === 'email') {
+          otpResult = await stytchClient.otps.email.loginOrCreate({
+            email: value,
             expiration_minutes: 5
           });
         }
-      } else if (medium === 'email') {
-        otpResult = await stytchClient.otps.email.send({
-          email: value,
-          expiration_minutes: 5
-        });
+
+        console.log(`🔍 Stytch OTP Response Status: ${otpResult.status_code}`);
+        
+        if (otpResult.status_code !== 200) {
+          throw new Error(`Stytch returned status ${otpResult.status_code}: ${otpResult.error_message || 'Unknown error'}`);
+        }
+        
+      } catch (stytchError) {
+        console.error(`❌ Stytch OTP Error:`, stytchError);
+        
+        // Handle specific Stytch errors
+        if (stytchError.message.includes('phone_number_not_found')) {
+          throw new Error('Phone number format is invalid or not supported');
+        }
+        if (stytchError.message.includes('email_not_found')) {
+          throw new Error('Email format is invalid');
+        }
+        
+        throw new Error(`Failed to send OTP: ${stytchError.message}`);
       }
 
       // Extract method_id
