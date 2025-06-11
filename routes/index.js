@@ -6,6 +6,8 @@ const activityRoutes = require('./activity');
 const promotionRoutes = require('./promotionRoutes');
 const logRoutes = require('./logRoutes');
 const transactionRoutes = require('./transactionRoutes');
+const contactRoutes = require('./contactRoutes');
+const walletRoutes = require('./walletRoutes');
 const stytchClient = require('../config/stytch');
 
 const router = express.Router();
@@ -79,6 +81,32 @@ router.get('/', (req, res) => {
         export: 'GET /api/v1/activity/export',
         cleanup: 'POST /api/v1/activity/cleanup'
       },
+      contacts: {
+        syncContacts: 'POST /api/v1/contacts/sync',
+        getContacts: 'GET /api/v1/contacts?favorites=true/false&limit=50&offset=0',
+        getFavorites: 'GET /api/v1/contacts/favorites',
+        searchContacts: 'GET /api/v1/contacts/search?q=searchTerm&limit=20&offset=0',
+        getSyncStatus: 'GET /api/v1/contacts/sync/status',
+        getStats: 'GET /api/v1/contacts/stats',
+        toggleFavorite: 'POST /api/v1/contacts/:contactId/favorite/toggle',
+        updateInteraction: 'POST /api/v1/contacts/interaction',
+        createPhoneMapping: 'POST /api/v1/contacts/phone-mapping'
+      },
+      wallets: {
+        createAuthToken: 'POST /api/v1/wallets/auth/token',
+        getConfig: 'GET /api/v1/wallets/config?network={network}',
+        getStatus: 'GET /api/v1/wallets/status',
+        getStats: 'GET /api/v1/wallets/stats',
+        getPrimary: 'GET /api/v1/wallets/primary',
+        verifyRecovery: 'POST /api/v1/wallets/recovery/verify',
+        getUserWallets: 'GET /api/v1/wallets',
+        createWallet: 'POST /api/v1/wallets',
+        getWalletByAddress: 'GET /api/v1/wallets/:address',
+        updateWallet: 'PUT /api/v1/wallets/:walletId',
+        addBackupMethod: 'POST /api/v1/wallets/:walletId/backup-methods',
+        generateRecoveryLink: 'POST /api/v1/wallets/:walletId/recovery-link',
+        deactivateWallet: 'DELETE /api/v1/wallets/:walletId'
+      },
       tests: '/api/v1/tests'
     },
     documentation: 'Check the README.md for complete API documentation',
@@ -96,6 +124,13 @@ router.get('/', (req, res) => {
       'Client-side event logging and analytics',
       'Server-side activity logging and monitoring',
       'Suspicious activity detection',
+      'Contact synchronization with privacy-preserving phone hashing',
+      'Contact favorites and interaction tracking',
+      'Contact search and discovery',
+      'Web3Auth integration for blockchain wallets',
+      'Multi-network wallet support (Ethereum, Polygon)',
+      'Secure wallet management and backup systems',
+      'Wallet transaction tracking and recovery',
       'Rate limiting',
       'Input validation',
       'Consistent error handling',
@@ -229,6 +264,8 @@ router.use('/v1/activity', activityRoutes);
 router.use('/v1/promotions', promotionRoutes);
 router.use('/v1/logs', logRoutes);
 router.use('/v1/transactions', transactionRoutes);
+router.use('/v1/contacts', contactRoutes);
+router.use('/v1/wallets', walletRoutes);
 
 // Legacy support (without versioning) - can be removed later
 router.use('/auth', authRoutes);
@@ -238,6 +275,8 @@ router.use('/activity', activityRoutes);
 router.use('/promotions', promotionRoutes);
 router.use('/logs', logRoutes);
 router.use('/transactions', transactionRoutes);
+router.use('/contacts', contactRoutes);
+router.use('/wallets', walletRoutes);
 
 // Add more route modules here as your application grows
 // router.use('/v1/users', userRoutes);

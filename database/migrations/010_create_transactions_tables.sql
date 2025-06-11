@@ -3,8 +3,12 @@
 -- Date: 2025-06-02
 
 -- Create enums for transaction types and status
--- CREATE TYPE transaction_type_enum AS ENUM ('transfer', 'payment', 'cash_out', 'cash_in', 'exchange');
--- CREATE TYPE transaction_status_enum AS ENUM ('pending', 'processing', 'completed', 'failed', 'cancelled');
+-- Drop existing types if they exist (for migration rerun safety)
+DROP TYPE IF EXISTS transaction_type_enum CASCADE;
+DROP TYPE IF EXISTS transaction_status_enum CASCADE;
+
+CREATE TYPE transaction_type_enum AS ENUM ('send', 'receive', 'buy', 'sell', 'swap', 'stake', 'unstake', 'reward', 'fee', 'deposit', 'withdrawal', 'transfer', 'payment', 'cash_out', 'cash_in', 'exchange');
+CREATE TYPE transaction_status_enum AS ENUM ('pending', 'processing', 'confirmed', 'completed', 'failed', 'cancelled', 'expired');
 
 -- Create transactions table
 CREATE TABLE IF NOT EXISTS transactions (
@@ -110,6 +114,10 @@ END;
 $$ language 'plpgsql';
 
 -- Create triggers to automatically update updated_at
+-- Drop existing triggers if they exist (for migration rerun safety)
+DROP TRIGGER IF EXISTS update_transactions_updated_at ON transactions;
+DROP TRIGGER IF EXISTS update_transaction_details_updated_at ON transaction_details;
+
 CREATE TRIGGER update_transactions_updated_at 
     BEFORE UPDATE ON transactions 
     FOR EACH ROW 
@@ -430,6 +438,9 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Create trigger for transaction activity logging
+-- Drop existing trigger if it exists (for migration rerun safety)
+DROP TRIGGER IF EXISTS trigger_log_transaction_activity ON transactions;
+
 CREATE TRIGGER trigger_log_transaction_activity
     AFTER INSERT ON transactions
     FOR EACH ROW

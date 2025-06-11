@@ -64,8 +64,7 @@ CREATE OR REPLACE FUNCTION log_user_activity(
     p_activity_type activity_type_enum DEFAULT 'other',
     p_details JSONB DEFAULT '{}',
     p_ip_address INET DEFAULT NULL,
-    p_device_id VARCHAR(255) DEFAULT NULL,
-    p_metadata JSONB DEFAULT '{}'
+    p_device_id VARCHAR(255) DEFAULT NULL
 )
 RETURNS UUID AS $$
 DECLARE
@@ -77,16 +76,14 @@ BEGIN
         activity_type,
         details,
         ip_address,
-        device_id,
-        metadata
+        device_id
     ) VALUES (
         p_user_id,
         p_action,
         p_activity_type,
         p_details,
         p_ip_address,
-        p_device_id,
-        p_metadata
+        p_device_id
     )
     RETURNING id INTO log_id;
     
