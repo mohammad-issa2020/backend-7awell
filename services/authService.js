@@ -513,17 +513,21 @@ class AuthService {
    * @param {string} user_id - Stytch user ID
    * @returns {Array} user sessions
    */
-  async getUserSessions(user_id) {
+  async getUserSessions(stytch_user_id) {
     try {
-      // Note: The exact method for getting user sessions may vary by SDK version
-      // Check Stytch documentation for the correct method
+      console.log(`🔍 Getting sessions for Stytch user: ${stytch_user_id}`);
+      
+      // Get user data from Stytch which includes sessions
       const result = await stytchClient.users.get({
-        user_id: user_id
+        user_id: stytch_user_id
       });
 
-      // Sessions might be in the user object or need a separate call
+      console.log(`📊 Found ${result.sessions?.length || 0} sessions for user`);
+      
+      // Sessions are in the user object
       return result.sessions || [];
     } catch (error) {
+      console.error(`❌ Error getting user sessions: ${error.message}`);
       throw new Error(`Error retrieving sessions: ${error.message}`);
     }
   }
@@ -549,17 +553,23 @@ class AuthService {
    * @param {string} user_id - user identifier
    * @returns {boolean} success status
    */
-  async revokeAllSessions(user_id) {
+  async revokeAllSessions(stytch_user_id) {
     try {
+      console.log(`🔄 Revoking all sessions for Stytch user: ${stytch_user_id}`);
+      
       // Get all user sessions first
-      const sessions = await this.getUserSessions(user_id);
+      const sessions = await this.getUserSessions(stytch_user_id);
+      
+      console.log(`📋 Found ${sessions.length} sessions to revoke`);
       
       for (const session of sessions) {
         await this.revokeSession(session.session_id);
       }
 
+      console.log(`✅ Successfully revoked all sessions`);
       return true;
     } catch (error) {
+      console.error(`❌ Error revoking all sessions: ${error.message}`);
       throw new Error(`Error revoking all sessions: ${error.message}`);
     }
   }

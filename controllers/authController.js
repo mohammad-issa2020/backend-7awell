@@ -389,9 +389,19 @@ class AuthController {
    */
   async getSessions(req, res) {
     try {
-      const userId = req.user.id;
+      const stytchUserId = req.user.stytchId;
       
-      const sessions = await authService.getUserSessions(userId);
+      if (!stytchUserId) {
+        return BaseResponse.error(
+          res,
+          'Stytch user ID not found',
+          400,
+          'Missing Stytch user ID in session',
+          'MISSING_STYTCH_USER_ID'
+        );
+      }
+      
+      const sessions = await authService.getUserSessions(stytchUserId);
       
       // Format sessions for response
       const formattedSessions = sessions.map(session => ({
@@ -497,9 +507,19 @@ class AuthController {
    */
   async revokeAllSessions(req, res) {
     try {
-      const userId = req.user.id;
+      const stytchUserId = req.user.stytchId;
       
-      const success = await authService.revokeAllSessions(userId);
+      if (!stytchUserId) {
+        return BaseResponse.error(
+          res,
+          'Stytch user ID not found',
+          400,
+          'Missing Stytch user ID in session',
+          'MISSING_STYTCH_USER_ID'
+        );
+      }
+      
+      const success = await authService.revokeAllSessions(stytchUserId);
       
       if (success) {
         return BaseResponse.success(

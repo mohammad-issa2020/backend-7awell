@@ -1,5 +1,9 @@
 -- Create enum for contact sync status
-CREATE TYPE contact_sync_status_enum AS ENUM ('pending', 'syncing', 'completed', 'failed');
+DO $$ BEGIN
+    CREATE TYPE contact_sync_status_enum AS ENUM ('pending', 'syncing', 'completed', 'failed');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- Create phones table for phone hash to user mapping
 CREATE TABLE IF NOT EXISTS phones (
@@ -47,18 +51,46 @@ CREATE INDEX IF NOT EXISTS idx_contact_sync_status ON contact_sync_status(status
 CREATE INDEX IF NOT EXISTS idx_contact_sync_last_sync ON contact_sync_status(last_sync);
 
 -- Add unique constraints
-ALTER TABLE contacts_with_accounts ADD CONSTRAINT unique_owner_phone 
-    UNIQUE (owner_id, phone_hash);
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'unique_owner_phone'
+    ) THEN
+        ALTER TABLE contacts_with_accounts ADD CONSTRAINT unique_owner_phone 
+            UNIQUE (owner_id, phone_hash);
+    END IF;
+END $$;
 
 -- Add check constraints
-ALTER TABLE contacts_with_accounts ADD CONSTRAINT check_phone_hash_length
-    CHECK (LENGTH(phone_hash) >= 32 AND LENGTH(phone_hash) <= 255);
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'check_phone_hash_length'
+    ) THEN
+        ALTER TABLE contacts_with_accounts ADD CONSTRAINT check_phone_hash_length
+            CHECK (LENGTH(phone_hash) >= 32 AND LENGTH(phone_hash) <= 255);
+    END IF;
+END $$;
 
-ALTER TABLE contact_sync_status ADD CONSTRAINT check_contacts_count_positive
-    CHECK (device_contacts_count >= 0 AND synced_contacts_count >= 0);
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'check_contacts_count_positive'
+    ) THEN
+        ALTER TABLE contact_sync_status ADD CONSTRAINT check_contacts_count_positive
+            CHECK (device_contacts_count >= 0 AND synced_contacts_count >= 0);
+    END IF;
+END $$;
 
-ALTER TABLE contact_sync_status ADD CONSTRAINT check_synced_not_greater_than_device
-    CHECK (synced_contacts_count <= device_contacts_count);
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'check_synced_not_greater_than_device'
+    ) THEN
+        ALTER TABLE contact_sync_status ADD CONSTRAINT check_synced_not_greater_than_device
+            CHECK (synced_contacts_count <= device_contacts_count);
+    END IF;
+END $$;
 
 -- Function to update updated_at timestamp for phones
 CREATE OR REPLACE FUNCTION update_phones_updated_at()
@@ -88,20 +120,41 @@ END;
 $$ language 'plpgsql';
 
 -- Create triggers to automatically update updated_at
-CREATE TRIGGER update_phones_updated_at 
-    BEFORE UPDATE ON phones 
-    FOR EACH ROW 
-    EXECUTE FUNCTION update_phones_updated_at();
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger 
+        WHERE tgname = 'update_phones_updated_at'
+    ) THEN
+        CREATE TRIGGER update_phones_updated_at 
+            BEFORE UPDATE ON phones 
+            FOR EACH ROW 
+            EXECUTE FUNCTION update_phones_updated_at();
+    END IF;
+END $$;
 
-CREATE TRIGGER update_contacts_updated_at 
-    BEFORE UPDATE ON contacts_with_accounts 
-    FOR EACH ROW 
-    EXECUTE FUNCTION update_contacts_updated_at();
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger 
+        WHERE tgname = 'update_contacts_updated_at'
+    ) THEN
+        CREATE TRIGGER update_contacts_updated_at 
+            BEFORE UPDATE ON contacts_with_accounts 
+            FOR EACH ROW 
+            EXECUTE FUNCTION update_contacts_updated_at();
+    END IF;
+END $$;
 
-CREATE TRIGGER update_contact_sync_updated_at 
-    BEFORE UPDATE ON contact_sync_status 
-    FOR EACH ROW 
-    EXECUTE FUNCTION update_contact_sync_updated_at();
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger 
+        WHERE tgname = 'update_contact_sync_updated_at'
+    ) THEN
+        CREATE TRIGGER update_contact_sync_updated_at 
+            BEFORE UPDATE ON contact_sync_status 
+            FOR EACH ROW 
+            EXECUTE FUNCTION update_contact_sync_updated_at();
+    END IF;
+END $$;
 
 -- Function to create phone hash mapping
 CREATE OR REPLACE FUNCTION create_phone_mapping(
@@ -131,7 +184,7 @@ CREATE OR REPLACE FUNCTION sync_user_contacts(
 )
 RETURNS JSON AS $$
 DECLARE
-    phone_hash TEXT;
+    current_phone_hash TEXT;
     matched_contacts INTEGER := 0;
     total_processed INTEGER := 0;
     linked_user UUID;
@@ -146,14 +199,14 @@ BEGIN
         updated_at = CURRENT_TIMESTAMP;
 
     -- Process each phone hash
-    FOREACH phone_hash IN ARRAY p_phone_hashes
+    FOREACH current_phone_hash IN ARRAY p_phone_hashes
     LOOP
         total_processed := total_processed + 1;
         
         -- Check if this phone hash is linked to a user
         SELECT linked_user_id INTO linked_user
         FROM phones 
-        WHERE phone_hash = phone_hash;
+        WHERE phone_hash = current_phone_hash;
         
         IF linked_user IS NOT NULL THEN
             -- Insert or update contact
@@ -165,7 +218,7 @@ BEGIN
             )
             VALUES (
                 p_owner_id, 
-                phone_hash, 
+                current_phone_hash, 
                 linked_user,
                 CURRENT_TIMESTAMP
             )
@@ -459,10 +512,17 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Create trigger for contact activity logging
-CREATE TRIGGER trigger_log_contact_activity
-    AFTER INSERT OR UPDATE ON contacts_with_accounts
-    FOR EACH ROW
-    EXECUTE FUNCTION log_contact_activity();
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger 
+        WHERE tgname = 'trigger_log_contact_activity'
+    ) THEN
+        CREATE TRIGGER trigger_log_contact_activity
+            AFTER INSERT OR UPDATE ON contacts_with_accounts
+            FOR EACH ROW
+            EXECUTE FUNCTION log_contact_activity();
+    END IF;
+END $$;
 
 -- Add comments for documentation
 COMMENT ON TABLE phones IS 'Phone hash to user ID mapping for privacy-preserving contact matching';
