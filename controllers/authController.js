@@ -1,5 +1,5 @@
 import authService from '../services/authService.js';
-import web3AuthService from '../services/web3AuthService.js';
+import web3AuthService from '../services/Web3AuthService.js';
 import BaseResponse from '../utils/baseResponse.js';
 
 class AuthController {
