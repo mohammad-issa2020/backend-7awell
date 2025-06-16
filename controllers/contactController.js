@@ -1,4 +1,4 @@
-import Contact from '../models/Contact.js';
+import ContactsWithAccounts from '../models/ContactsWithAccounts.js';
 import BaseResponse from '../utils/baseResponse.js';
 import { logUserActivity } from '../services/activityService.js';
 
@@ -43,7 +43,7 @@ class ContactController {
         );
       }
 
-      const result = await Contact.syncContacts(userId, phoneNumbers, deviceContactsCount);
+      const result = await ContactsWithAccounts.syncContacts(userId, phoneNumbers, deviceContactsCount);
 
       // Log the sync activity
       await logUserActivity(
@@ -93,7 +93,7 @@ class ContactController {
         offset: parseInt(offset) || 0
       };
 
-      const rawContacts = await Contact.getUserContacts(userId, options);
+      const rawContacts = await ContactsWithAccounts.getUserContacts(userId, options);
 
       // Format the response to be more user-friendly
       const contacts = rawContacts.map(contact => ({
@@ -151,7 +151,7 @@ class ContactController {
     try {
       const userId = req.user.id;
 
-      const rawFavorites = await Contact.getFavoriteContacts(userId);
+      const rawFavorites = await ContactsWithAccounts.getFavoriteContacts(userId);
 
       // Format the response consistently
       const contacts = rawFavorites.map(contact => ({
@@ -203,7 +203,7 @@ class ContactController {
       const userId = req.user.id;
       const { contactId } = req.params;
 
-      const result = await Contact.toggleFavorite(userId, contactId);
+      const result = await ContactsWithAccounts.toggleFavorite(userId, contactId);
 
       if (!result.success) {
         return BaseResponse.error(
@@ -259,7 +259,7 @@ class ContactController {
         );
       }
 
-      const result = await Contact.updateInteraction(userId, phoneNumber);
+      const result = await ContactsWithAccounts.updateInteraction(userId, phoneNumber);
 
       return BaseResponse.success(
         res,
@@ -286,7 +286,7 @@ class ContactController {
     try {
       const userId = req.user.id;
 
-      const status = await Contact.getSyncStatus(userId);
+      const status = await ContactsWithAccounts.getSyncStatus(userId);
 
       if (!status) {
         return BaseResponse.success(
@@ -345,7 +345,7 @@ class ContactController {
         offset: parseInt(offset) || 0
       };
 
-      const rawContacts = await Contact.searchContacts(userId, searchTerm.trim(), options);
+      const rawContacts = await ContactsWithAccounts.searchContacts(userId, searchTerm.trim(), options);
 
       // Format the response consistently with getContacts
       const contacts = rawContacts.map(contact => ({
@@ -417,7 +417,7 @@ class ContactController {
         );
       }
 
-      const result = await Contact.createPhoneMapping(phoneNumber, userId);
+      const result = await ContactsWithAccounts.createPhoneMapping(phoneNumber, userId);
 
       // Log the activity
       await logUserActivity(
@@ -457,10 +457,10 @@ class ContactController {
       const userId = req.user.id;
 
       // Get sync status for basic stats
-      const syncStatus = await Contact.getSyncStatus(userId);
+      const syncStatus = await ContactsWithAccounts.getSyncStatus(userId);
       
       // Get favorite count
-      const favorites = await Contact.getFavoriteContacts(userId);
+      const favorites = await ContactsWithAccounts.getFavoriteContacts(userId);
 
       const stats = {
         total_device_contacts: syncStatus?.device_contacts_count || 0,
