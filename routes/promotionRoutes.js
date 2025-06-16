@@ -1,7 +1,7 @@
-const express = require('express');
-const promotionController = require('../controllers/promotionController');
-const { authenticateToken, authenticateAdmin, adminOnly } = require('../middleware/authMiddleware');
-const rateLimiter = require('../middleware/rateLimiter');
+import express from 'express';
+import promotionController from '../controllers/promotionController.js';
+import { authenticateToken, authenticateAdmin, adminOnly } from '../middleware/authMiddleware.js';
+import rateLimiter from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
@@ -107,4 +107,4 @@ router.delete('/:promotionId',
   promotionController.deletePromotion
 );
 
-module.exports = router; 
+export default router; 

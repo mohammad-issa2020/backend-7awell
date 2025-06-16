@@ -1,5 +1,5 @@
-const adminAuthService = require('../services/adminAuthService');
-const { createSuccessResponse, createErrorResponse } = require('../utils/baseResponse');
+import adminAuthService from '../services/adminAuthService.js';
+import { createSuccessResponse, createErrorResponse } from '../utils/baseResponse.js';
 
 class AdminAuthController {
   /**
@@ -265,4 +265,4 @@ class AdminAuthController {
   }
 }
 
-module.exports = new AdminAuthController(); 
+export default new AdminAuthController(); 

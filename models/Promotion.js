@@ -1,4 +1,4 @@
-const { v4: uuidv4 } = require('uuid');
+import { v4 as uuidv4 } from 'uuid';
 
 class Promotion {
   constructor(data = {}) {
@@ -369,4 +369,4 @@ class Promotion {
   }
 }
 
-module.exports = Promotion; 
+export default Promotion; 

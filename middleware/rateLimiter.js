@@ -1,6 +1,6 @@
-const rateLimit = require('express-rate-limit');
-const RedisStore = require('rate-limit-redis');
-const redis = require('redis');
+import rateLimit from 'express-rate-limit';
+import RedisStore from 'rate-limit-redis';
+import redis from 'redis';
 
 class RateLimiter {
   constructor() {
@@ -147,10 +147,7 @@ class RateLimiter {
   }
 }
 
-// Export a singleton instance
 const rateLimiterInstance = new RateLimiter();
 
-module.exports = rateLimiterInstance;
-
-// Also export the class for testing
-module.exports.RateLimiter = RateLimiter; 
+export default rateLimiterInstance;
+export { RateLimiter }; 

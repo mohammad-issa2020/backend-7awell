@@ -1,6 +1,6 @@
-const { supabase, supabaseAdmin } = require('../database/supabase');
-const redis = require('redis');
-const Promotion = require('../models/Promotion');
+import { supabase, supabaseAdmin } from '../database/supabase.js';
+import redis from 'redis';
+import Promotion from '../models/Promotion.js';
 
 class PromotionService {
   constructor() {
@@ -403,4 +403,4 @@ class PromotionService {
   }
 }
 
-module.exports = new PromotionService(); 
+export default new PromotionService(); 

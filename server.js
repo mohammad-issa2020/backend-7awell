@@ -1,13 +1,11 @@
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
-require('dotenv').config();
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
 
 // Import routes
-const apiRoutes = require('./routes/index');
-const BaseResponse = require('./utils/baseResponse');
-
+import apiRoutes from './routes/index.js';
+import BaseResponse, { createSuccessResponse, createErrorResponse } from './utils/baseResponse.js';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -62,4 +60,4 @@ app.listen(PORT, () => {
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
-module.exports = app; 
+export default app; 

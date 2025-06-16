@@ -1,6 +1,5 @@
-const ClientLogService = require('../services/clientLogService');
-const { CLIENT_EVENT_TYPES, CLIENT_LOG_CATEGORIES } = require('../services/clientLogService');
-const { createSuccessResponse, createErrorResponse } = require('../utils/baseResponse');
+import ClientLogService, { CLIENT_EVENT_TYPES, CLIENT_LOG_CATEGORIES } from '../services/clientLogService.js';
+import { createSuccessResponse, createErrorResponse } from '../utils/baseResponse.js';
 
 class LogController {
   /**
@@ -474,4 +473,4 @@ class LogController {
   }
 }
 
-module.exports = new LogController(); 
+export default new LogController(); 

@@ -1,4 +1,4 @@
-const { v4: uuidv4 } = require('uuid');
+import { v4 as uuidv4 } from 'uuid';
 
 class BaseResponse {
   constructor() {}
@@ -146,7 +146,7 @@ class BaseResponse {
  * @param {string} traceId - Optional trace ID
  * @returns {Object} Response object
  */
-function createSuccessResponse(data = null, message = 'Success', statusCode = 200, traceId = null) {
+export function createSuccessResponse(data = null, message = 'Success', statusCode = 200, traceId = null) {
   const response = {
     statusCode,
     status: 'SUCCESS',
@@ -171,7 +171,7 @@ function createSuccessResponse(data = null, message = 'Success', statusCode = 20
  * @param {string} traceId - Optional trace ID
  * @returns {Object} Response object
  */
-function createErrorResponse(message = 'Internal Server Error', errorCode = null, statusCode = 500, error = null, traceId = null) {
+export function createErrorResponse(message = 'Internal Server Error', errorCode = null, statusCode = 500, error = null, traceId = null) {
   const response = {
     statusCode,
     status: 'ERROR',
@@ -191,6 +191,4 @@ function createErrorResponse(message = 'Internal Server Error', errorCode = null
   return response;
 }
 
-module.exports = BaseResponse;
-module.exports.createSuccessResponse = createSuccessResponse;
-module.exports.createErrorResponse = createErrorResponse; 
+export default BaseResponse; 

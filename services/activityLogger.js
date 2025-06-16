@@ -1,8 +1,8 @@
-const supabase = require('../database/supabase');
-const { v4: uuidv4 } = require('uuid');
+import { supabase } from '../database/supabase.js';
+import { v4 as uuidv4 } from 'uuid';
 
 // Activity types enum matching database
-const ACTIVITY_TYPES = {
+export const ACTIVITY_TYPES = {
     AUTH_LOGIN: 'auth_login',
     AUTH_LOGOUT: 'auth_logout',
     AUTH_FAILED_LOGIN: 'auth_failed_login',
@@ -34,7 +34,7 @@ const ACTIVITY_TYPES = {
 };
 
 // Risk levels
-const RISK_LEVELS = {
+export const RISK_LEVELS = {
     LOW: 'low',
     MEDIUM: 'medium', 
     HIGH: 'high',
@@ -343,8 +343,4 @@ class ActivityLogger {
 
 }
 
-module.exports = {
-    ActivityLogger,
-    ACTIVITY_TYPES,
-    RISK_LEVELS
-}; 
+export default ActivityLogger; 

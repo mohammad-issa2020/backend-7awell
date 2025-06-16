@@ -1,6 +1,6 @@
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const { v4: uuidv4 } = require('uuid');
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { v4 as uuidv4 } from 'uuid';
 
 class AdminAuthService {
   constructor() {
@@ -283,4 +283,4 @@ setInterval(() => {
   adminAuthService.cleanupExpiredSessions();
 }, 60 * 60 * 1000); // 1 hour
 
-module.exports = adminAuthService; 
+export default adminAuthService; 

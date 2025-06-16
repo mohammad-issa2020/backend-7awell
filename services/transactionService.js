@@ -1,5 +1,5 @@
-const { supabase } = require('../database/supabase');
-const ActivityLogger = require('./activityLogger');
+import { supabase } from '../database/supabase.js';
+import ActivityLogger from './activityLogger.js';
 
 // Transaction types mapping
 const TRANSACTION_TYPES = {
@@ -640,7 +640,5 @@ class TransactionService {
   }
 }
 
-module.exports = TransactionService;
-module.exports.TRANSACTION_TYPES = TRANSACTION_TYPES;
-module.exports.TRANSACTION_STATUS = TRANSACTION_STATUS;
-module.exports.ASSET_TYPES = ASSET_TYPES; 
+export default TransactionService;
+export { TRANSACTION_TYPES, TRANSACTION_STATUS, ASSET_TYPES }; 

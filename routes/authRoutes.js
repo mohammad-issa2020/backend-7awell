@@ -1,14 +1,15 @@
-const express = require('express');
-const rateLimit = require('express-rate-limit');
-const authController = require('../controllers/authController');
-const { authenticateToken } = require('../middleware/authMiddleware');
-const {
+import express from 'express';
+import rateLimit from 'express-rate-limit';
+import { v4 as uuidv4 } from 'uuid';
+import authController from '../controllers/authController.js';
+import { authenticateToken } from '../middleware/authMiddleware.js';
+import {
   authActivityLogger,
   securityActivityLogger,
   suspiciousActivityTracker,
   errorActivityLogger
-} = require('../middleware/activityMiddleware');
-const {
+} from '../middleware/activityMiddleware.js';
+import {
   validateBody,
   validateQuery,
   checkAvailabilitySchema,
@@ -20,23 +21,10 @@ const {
   sendVerificationOTPSchema,
   verifyVerificationOTPSchema,
   completeLoginSchema
-} = require('../middleware/validation');
+} from '../middleware/validation.js';
 
 const router = express.Router();
 
-// Rate limiting configurations
-const otpRateLimit = rateLimit({
-  windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 3, // 3 requests per window
-  message: {
-    statusCode: 429,
-    message: 'Too many OTP requests, please try again in 5 minutes',
-    errorCode: 'OTP_RATE_LIMIT_EXCEEDED',
-    traceId: require('uuid').v4()
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
 
 const generalRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -45,20 +33,7 @@ const generalRateLimit = rateLimit({
     statusCode: 429,
     message: 'Too many requests, please try again later',
     errorCode: 'RATE_LIMIT_EXCEEDED',
-    traceId: require('uuid').v4()
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-const loginRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 login attempts per window
-  message: {
-    statusCode: 429,
-    message: 'Too many login attempts, please try again in 15 minutes',
-    errorCode: 'LOGIN_RATE_LIMIT_EXCEEDED',
-    traceId: require('uuid').v4()
+    traceId: uuidv4()
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -77,28 +52,6 @@ router.get(
   authController.checkAvailability
 );
 
-router.post(
-  '/otp/send',
-  otpRateLimit,
-  validateBody(sendOTPSchema),
-  authActivityLogger('Send OTP'),
-  authController.sendOTP
-);
-
-router.post(
-  '/otp/verify',
-  validateBody(verifyOTPSchema),
-  authActivityLogger('Verify OTP'),
-  authController.verifyOTP
-);
-
-router.post(
-  '/login',
-  loginRateLimit,
-  validateBody(loginSchema),
-  authActivityLogger('User login'),
-  authController.login
-);
 
 router.post(
   '/refresh',
@@ -111,34 +64,6 @@ router.get(
   '/me',
   authenticateToken,
   authController.getCurrentUser
-);
-
-router.get(
-  '/sessions',
-  authenticateToken,
-  securityActivityLogger('Get sessions'),
-  authController.getSessions
-);
-
-router.delete(
-  '/sessions/:sessionId',
-  authenticateToken,
-  securityActivityLogger('Revoke session'),
-  authController.revokeSession
-);
-
-router.delete(
-  '/sessions',
-  authenticateToken,
-  securityActivityLogger('Revoke all sessions'),
-  authController.revokeAllSessions
-);
-
-router.post(
-  '/logout',
-  authenticateToken,
-  authActivityLogger('User logout'),
-  authController.logout
 );
 
 router.get(
@@ -197,4 +122,19 @@ router.get(
   authController.getVerificationStatus
 );
 
-module.exports = router; 
+// Wallet management routes (require authentication)
+router.post(
+  '/create-wallet',
+  authenticateToken,
+  authActivityLogger('Create Wallet'),
+  authController.createWallet
+);
+
+router.get(
+  '/wallet',
+  authenticateToken,
+  authActivityLogger('Get Wallet Info'),
+  authController.getWallet
+);
+
+export default router; 

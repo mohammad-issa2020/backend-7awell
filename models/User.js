@@ -1,148 +1,186 @@
-const { DataTypes } = require('sequelize');
-const bcrypt = require('bcryptjs');
-const sequelize = require('../database/connection');
+import { supabaseAdmin } from '../database/supabase.js';
 
-const User = sequelize.define('User', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true
-  },
-  firstName: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    validate: {
-      notEmpty: true,
-      len: [2, 50]
-    }
-  },
-  lastName: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    validate: {
-      notEmpty: true,
-      len: [2, 50]
-    }
-  },
-  email: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    unique: true,
-    validate: {
-      isEmail: true
-    }
-  },
-  phoneNumber: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    unique: true,
-    validate: {
-      notEmpty: true,
-      is: /^\+[1-9]\d{1,14}$/ // E.164 format
-    }
-  },
-  password: {
-    type: DataTypes.STRING,
-    allowNull: true // Can be null for OTP-only authentication
-  },
-  role: {
-    type: DataTypes.ENUM('user', 'admin', 'moderator'),
-    defaultValue: 'user'
-  },
-  isEmailVerified: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false
-  },
-  isPhoneVerified: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false
-  },
-  emailOtp: {
-    type: DataTypes.STRING,
-    allowNull: true
-  },
-  phoneOtp: {
-    type: DataTypes.STRING,
-    allowNull: true
-  },
-  emailOtpExpiry: {
-    type: DataTypes.DATE,
-    allowNull: true
-  },
-  phoneOtpExpiry: {
-    type: DataTypes.DATE,
-    allowNull: true
-  },
-  lastLoginAt: {
-    type: DataTypes.DATE,
-    allowNull: true
-  },
-  refreshToken: {
-    type: DataTypes.TEXT,
-    allowNull: true
-  },
-  status: {
-    type: DataTypes.ENUM('active', 'inactive', 'suspended'),
-    defaultValue: 'active'
-  }
-}, {
-  timestamps: true,
-  underscored: true,
-  hooks: {
-    beforeSave: async (user) => {
-      if (user.changed('password') && user.password) {
-        const saltRounds = 12;
-        user.password = await bcrypt.hash(user.password, saltRounds);
+/**
+ * User Model for Supabase
+ */
+class User {
+  /**
+   * Create a new user
+   * @param {Object} userData - User data
+   * @returns {Object} Created user
+   */
+  static async create(userData) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .insert([{
+          phone: userData.phone,
+          email: userData.email,
+          phone_verified: userData.phone_verified || false,
+          email_verified: userData.email_verified || false,
+          status: userData.status || 'active',
+          kyc_level: userData.kyc_level || 'none',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        throw new Error(`Database error: ${error.message}`);
       }
+
+      return data;
+    } catch (error) {
+      console.error('❌ Error creating user:', error);
+      throw error;
     }
   }
-});
 
-// Instance methods
-User.prototype.comparePassword = async function(candidatePassword) {
-  if (!this.password) return false;
-  return await bcrypt.compare(candidatePassword, this.password);
-};
+  /**
+   * Find user by primary key (ID)
+   * @param {string} id - User ID
+   * @returns {Object|null} User data
+   */
+  static async findByPk(id) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', id)
+        .single();
 
-User.prototype.generateOtp = function() {
-  return Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
-};
+      if (error && error.code !== 'PGRST116') {
+        throw new Error(`Database error: ${error.message}`);
+      }
 
-User.prototype.setEmailOtp = function() {
-  this.emailOtp = this.generateOtp();
-  this.emailOtpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-};
+      return data || null;
+    } catch (error) {
+      console.error('❌ Error finding user by ID:', error);
+      return null;
+    }
+  }
 
-User.prototype.setPhoneOtp = function() {
-  this.phoneOtp = this.generateOtp();
-  this.phoneOtpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-};
+  /**
+   * Find user with conditions
+   * @param {Object} options - Query options
+   * @returns {Object|null} User data
+   */
+  static async findOne(options = {}) {
+    try {
+      let query = supabaseAdmin.from('users').select('*');
 
-User.prototype.isEmailOtpValid = function(otp) {
-  return this.emailOtp === otp && new Date() < this.emailOtpExpiry;
-};
+      if (options.where) {
+        Object.entries(options.where).forEach(([key, value]) => {
+          query = query.eq(key, value);
+        });
+      }
 
-User.prototype.isPhoneOtpValid = function(otp) {
-  return this.phoneOtp === otp && new Date() < this.phoneOtpExpiry;
-};
+      const { data, error } = await query.single();
 
-User.prototype.clearEmailOtp = function() {
-  this.emailOtp = null;
-  this.emailOtpExpiry = null;
-};
+      if (error && error.code !== 'PGRST116') {
+        throw new Error(`Database error: ${error.message}`);
+      }
 
-User.prototype.clearPhoneOtp = function() {
-  this.phoneOtp = null;
-  this.phoneOtpExpiry = null;
-};
+      return data || null;
+    } catch (error) {
+      console.error('❌ Error finding user:', error);
+      return null;
+    }
+  }
 
-User.prototype.toJSON = function() {
-  const values = { ...this.get() };
-  delete values.password;
-  delete values.emailOtp;
-  delete values.phoneOtp;
-  delete values.refreshToken;
-  return values;
-};
+  /**
+   * Update user
+   * @param {Object} updateData - Data to update
+   * @returns {Object} Updated user
+   */
+  async update(updateData) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .update({
+          ...updateData,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', this.id)
+        .select()
+        .single();
 
-module.exports = User; 
+      if (error) {
+        throw new Error(`Database error: ${error.message}`);
+      }
+
+      // Update current instance
+      Object.assign(this, data);
+      return this;
+    } catch (error) {
+      console.error('❌ Error updating user:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete user
+   * @returns {boolean} Success status
+   */
+  async destroy() {
+    try {
+      const { error } = await supabaseAdmin
+        .from('users')
+        .delete()
+        .eq('id', this.id);
+
+      if (error) {
+        throw new Error(`Database error: ${error.message}`);
+      }
+
+      return true;
+    } catch (error) {
+      console.error('❌ Error deleting user:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete all users (for testing)
+   * @param {Object} options - Delete options
+   * @returns {boolean} Success status
+   */
+  static async destroy(options = {}) {
+    try {
+      if (options.where && Object.keys(options.where).length === 0) {
+        // Delete all users
+        const { error } = await supabaseAdmin
+          .from('users')
+          .delete()
+          .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all except dummy
+      } else if (options.where) {
+        let query = supabaseAdmin.from('users').delete();
+        
+        Object.entries(options.where).forEach(([key, value]) => {
+          query = query.eq(key, value);
+        });
+
+        const { error } = await query;
+        if (error) {
+          throw new Error(`Database error: ${error.message}`);
+        }
+      }
+
+      return true;
+    } catch (error) {
+      console.error('❌ Error deleting users:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Constructor for instance methods
+   * @param {Object} userData - User data
+   */
+  constructor(userData) {
+    Object.assign(this, userData);
+  }
+}
+
+export default User; 

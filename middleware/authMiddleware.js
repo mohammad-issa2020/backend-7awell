@@ -1,7 +1,7 @@
-const authService = require('../services/authService');
-const adminAuthService = require('../services/adminAuthService');
-const UserMappingService = require('../services/userMappingService');
-const BaseResponse = require('../utils/baseResponse');
+import authService from '../services/authService.js';
+import adminAuthService from '../services/adminAuthService.js';
+import UserMappingService from '../services/userMappingService.js';
+import BaseResponse from '../utils/baseResponse.js';
 
 /**
  * Middleware to authenticate Stytch session tokens (for users)
@@ -291,11 +291,11 @@ const optionalAuth = async (req, res, next) => {
   }
 };
 
-module.exports = {
-  authenticateToken,      // User authentication only
-  authenticateAdmin,      // Admin authentication only
-  authenticateAny,        // Either user or admin
-  requireAdminPermission, // Check admin permissions
-  adminOnly,              // Admin access only
-  optionalAuth           // Optional authentication
+export { 
+  authenticateToken,
+  authenticateAdmin, 
+  authenticateAny,
+  requireAdminPermission, 
+  adminOnly,
+  optionalAuth
 }; 

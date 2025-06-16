@@ -1,8 +1,8 @@
-const express = require('express');
-const contactController = require('../controllers/contactController');
-const { authenticateToken } = require('../middleware/authMiddleware');
-const { validateBody, validateQuery } = require('../middleware/validation');
-const Joi = require('joi');
+import express from 'express';
+import contactController from '../controllers/contactController.js';
+import { authenticateToken } from '../middleware/authMiddleware.js';
+import { validateBody, validateQuery } from '../middleware/validation.js';
+import Joi from 'joi';
 
 const router = express.Router();
 
@@ -148,4 +148,4 @@ router.post('/phone-mapping',
   contactController.createPhoneMapping
 );
 
-module.exports = router; 
+export default router; 

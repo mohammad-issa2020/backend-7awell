@@ -1,7 +1,7 @@
-const web3AuthService = require('../services/web3authService');
-const Wallet = require('../models/Wallet');
-const BaseResponse = require('../utils/baseResponse');
-const { logUserActivity } = require('../services/activityService');
+import web3AuthService from '../services/web3AuthService.js';
+import Wallet from '../models/Wallet.js';
+import BaseResponse from '../utils/baseResponse.js';
+import { logUserActivity } from '../services/activityService.js';
 
 /**
  * Wallet Controller to handle wallets and Web3Auth
@@ -739,7 +739,7 @@ class WalletController {
       });
 
       // update user table
-      await web3authService.createWallet(userId, {
+      await web3AuthService.createWallet(userId, {
         address: address.toLowerCase(),
         network: wallet.network,
         provider: wallet.provider
@@ -776,6 +776,30 @@ class WalletController {
       );
     }
   }
+
+  /**
+   * Check Web3Auth configuration status
+   * GET /api/v1/wallets/web3auth/status
+   */
+  async getWeb3AuthStatus(req, res) {
+    try {
+      const status = web3AuthService.getConfigurationStatus();
+      
+      return BaseResponse.success(
+        res,
+        status,
+        'Web3Auth configuration status retrieved successfully'
+      );
+    } catch (error) {
+      return BaseResponse.error(
+        res,
+        'Failed to get Web3Auth status',
+        500,
+        error.message,
+        'WEB3AUTH_STATUS_FAILED'
+      );
+    }
+  }
 }
 
-module.exports = new WalletController();
+export default new WalletController();

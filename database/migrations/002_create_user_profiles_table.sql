@@ -3,16 +3,16 @@ CREATE TYPE gender_enum AS ENUM ('male', 'female', 'other');
 
 -- Create user_profiles table
 CREATE TABLE IF NOT EXISTS user_profiles (
-    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID PRIMARY KEY REFERENCES users(id),
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
     avatar_url TEXT,
     date_of_birth DATE,
     gender gender_enum,
-    country VARCHAR(2), -- ISO country code (ISO 3166-1 alpha-2)
+    country VARCHAR(4), -- ISO country code
     address TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 -- Create indexes for better performance

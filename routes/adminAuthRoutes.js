@@ -1,7 +1,7 @@
-const express = require('express');
-const adminAuthController = require('../controllers/adminAuthController');
-const { authenticateAdmin, requireAdminPermission } = require('../middleware/authMiddleware');
-const rateLimiter = require('../middleware/rateLimiter');
+import express from 'express';
+import adminAuthController from '../controllers/adminAuthController.js';
+import { authenticateAdmin, requireAdminPermission } from '../middleware/authMiddleware.js';
+import rateLimiter from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
@@ -81,4 +81,4 @@ router.post('/create',
   adminAuthController.createAdmin
 );
 
-module.exports = router; 
+export default router; 

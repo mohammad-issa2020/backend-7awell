@@ -1,6 +1,6 @@
-const { validationResult } = require('express-validator');
-const BaseResponse = require('../utils/baseResponse');
-const Joi = require('joi');
+import { validationResult } from 'express-validator';
+import BaseResponse from '../utils/baseResponse.js';
+import Joi from 'joi';
 
 class ValidationMiddleware {
   /**
@@ -171,7 +171,7 @@ const validateQuery = (schema) => {
 
 // Validation schemas for authentication endpoints
 
-const checkAvailabilitySchema = Joi.object({
+export const checkAvailabilitySchema = Joi.object({
   medium: Joi.string().valid('phone', 'email').required(),
   value: Joi.alternatives().conditional('medium', {
     is: 'phone',
@@ -193,57 +193,7 @@ const checkAvailabilitySchema = Joi.object({
   })
 });
 
-const sendOTPSchema = Joi.object({
-  medium: Joi.string().valid('phone', 'email').required(),
-  value: Joi.alternatives().conditional('medium', {
-    is: 'phone',
-    then: Joi.string()
-      .pattern(/^(\+|%2B|\s)[1-9]\d{1,14}$/)
-      .required()
-      .custom((value, helpers) => {
-        // Normalize the phone number by converting space or %2B to +
-        let normalized = value.replace(/^(\s|%2B)/, '+');
-        
-        // Validate the normalized format
-        if (!/^\+[1-9]\d{1,14}$/.test(normalized)) {
-          return helpers.error('any.invalid');
-        }
-        
-        return normalized;
-      }, 'Phone number normalization'),
-    otherwise: Joi.string().email().required()
-  }),
-  channel: Joi.alternatives().conditional('medium', {
-    is: 'phone',
-    then: Joi.string().valid('whatsapp', 'sms').default('sms'),
-    otherwise: Joi.string().valid('email').default('email')
-  })
-});
-
-const verifyOTPSchema = Joi.object({
-  medium: Joi.string().valid('phone', 'email').required(),
-  value: Joi.alternatives().conditional('medium', {
-    is: 'phone',
-    then: Joi.string()
-      .pattern(/^(\+|%2B|\s)[1-9]\d{1,14}$/)
-      .required()
-      .custom((value, helpers) => {
-        // Normalize the phone number by converting space or %2B to +
-        let normalized = value.replace(/^(\s|%2B)/, '+');
-        
-        // Validate the normalized format
-        if (!/^\+[1-9]\d{1,14}$/.test(normalized)) {
-          return helpers.error('any.invalid');
-        }
-        
-        return normalized;
-      }, 'Phone number normalization'),
-    otherwise: Joi.string().email().required()
-  }),
-  otp: Joi.string().pattern(/^\d{6}$/).required()
-});
-
-const loginSchema = Joi.object({
+export const loginSchema = Joi.object({
   phoneNumber: Joi.string()
     .pattern(/^(\+|%2B|\s)[1-9]\d{1,14}$/)
     .optional()
@@ -263,15 +213,15 @@ const loginSchema = Joi.object({
   email: Joi.string().email().optional()
 }).or('phoneNumber', 'email');
 
-const refreshTokenSchema = Joi.object({
+export const refreshTokenSchema = Joi.object({
   refreshToken: Joi.string().required()
 });
 
-const revokeDeviceSchema = Joi.object({
+export const revokeDeviceSchema = Joi.object({
   deviceId: Joi.string().uuid().optional()
 });
 
-const startVerificationSchema = Joi.object({
+export const startVerificationSchema = Joi.object({
   phoneNumber: Joi.string()
     .pattern(/^(\+|%2B|\s)[1-9]\d{1,14}$/)
     .required()
@@ -289,7 +239,7 @@ const startVerificationSchema = Joi.object({
   email: Joi.string().email().required()
 });
 
-const sendVerificationOTPSchema = Joi.object({
+export const sendVerificationOTPSchema = Joi.object({
   sessionId: Joi.string().uuid().required(),
   medium: Joi.string().valid('phone', 'email').required(),
   channel: Joi.alternatives().conditional('medium', {
@@ -299,28 +249,16 @@ const sendVerificationOTPSchema = Joi.object({
   })
 });
 
-const verifyVerificationOTPSchema = Joi.object({
+export const verifyVerificationOTPSchema = Joi.object({
   sessionId: Joi.string().uuid().required(),
   medium: Joi.string().valid('phone', 'email').required(),
   otp: Joi.string().pattern(/^\d{6}$/).required()
 });
 
-const completeLoginSchema = Joi.object({
+export const completeLoginSchema = Joi.object({
   sessionId: Joi.string().uuid().required()
 });
 
-module.exports = {
-  validateBody,
-  validateQuery,
-  checkAvailabilitySchema,
-  sendOTPSchema,
-  verifyOTPSchema,
-  loginSchema,
-  refreshTokenSchema,
-  revokeDeviceSchema,
-  startVerificationSchema,
-  sendVerificationOTPSchema,
-  verifyVerificationOTPSchema,
-  completeLoginSchema,
-  ValidationMiddleware
-}; 
+export { validateBody, validateQuery };
+
+export { ValidationMiddleware }; 

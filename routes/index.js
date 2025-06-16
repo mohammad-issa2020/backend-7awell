@@ -1,14 +1,15 @@
-const express = require('express');
-const testRoutes = require('./testRoutes');
-const authRoutes = require('./authRoutes');
-const adminAuthRoutes = require('./adminAuthRoutes');
-const activityRoutes = require('./activity');
-const promotionRoutes = require('./promotionRoutes');
-const logRoutes = require('./logRoutes');
-const transactionRoutes = require('./transactionRoutes');
-const contactRoutes = require('./contactRoutes');
-const walletRoutes = require('./walletRoutes');
-const stytchClient = require('../config/stytch');
+import express from 'express';
+import authRoutes from './authRoutes.js';
+import adminAuthRoutes from './adminAuthRoutes.js';
+import activityRoutes from './activity.js';
+import promotionRoutes from './promotionRoutes.js';
+import logRoutes from './logRoutes.js';
+import transactionRoutes from './transactionRoutes.js';
+import contactRoutes from './contactRoutes.js';
+import walletRoutes from './walletRoutes.js';
+import solanaRoutes from './solanaRoutes.js';
+import stytchClient from '../config/stytch.js';
+import userController from '../controllers/userController.js';
 
 const router = express.Router();
 
@@ -107,6 +108,17 @@ router.get('/', (req, res) => {
         generateRecoveryLink: 'POST /api/v1/wallets/:walletId/recovery-link',
         deactivateWallet: 'DELETE /api/v1/wallets/:walletId'
       },
+      solana: {
+        prepareUSDTTransfer: 'POST /api/v1/solana/usdt/prepare',
+        completeUSDTTransfer: 'POST /api/v1/solana/usdt/complete',
+        sendUSDTSimple: 'POST /api/v1/solana/usdt/send-simple (dev only)',
+        checkUSDTBalance: 'GET /api/v1/solana/usdt/balance/:walletAddress',
+        checkFeePayerBalance: 'GET /api/v1/solana/fee-payer/balance',
+        estimateFee: 'GET /api/v1/solana/estimate-fee',
+        getStats: 'GET /api/v1/solana/stats',
+        getTransaction: 'GET /api/v1/solana/transaction/:signature',
+        docs: 'GET /api/v1/solana/docs'
+      },
       tests: '/api/v1/tests'
     },
     documentation: 'Check the README.md for complete API documentation',
@@ -131,6 +143,9 @@ router.get('/', (req, res) => {
       'Multi-network wallet support (Ethereum, Polygon)',
       'Secure wallet management and backup systems',
       'Wallet transaction tracking and recovery',
+      'Solana USDT transfers with fee payer system',
+      'High-speed, low-cost crypto transactions',
+      'Automated fee payment from main wallet',
       'Rate limiting',
       'Input validation',
       'Consistent error handling',
@@ -259,28 +274,30 @@ router.get('/debug-otp', (req, res) => {
 // API versioning - v1 routes
 router.use('/v1/auth', authRoutes);
 router.use('/v1/admin/auth', adminAuthRoutes);
-router.use('/v1/tests', testRoutes);
 router.use('/v1/activity', activityRoutes);
 router.use('/v1/promotions', promotionRoutes);
 router.use('/v1/logs', logRoutes);
 router.use('/v1/transactions', transactionRoutes);
 router.use('/v1/contacts', contactRoutes);
 router.use('/v1/wallets', walletRoutes);
+router.use('/v1/solana', solanaRoutes);
+router.get('/v1/user', userController.getUserProfile);
+router.put('/v1/user/preferences', userController.updatePreferences);
 
 // Legacy support (without versioning) - can be removed later
 router.use('/auth', authRoutes);
 router.use('/admin/auth', adminAuthRoutes);
-router.use('/tests', testRoutes);
 router.use('/activity', activityRoutes);
 router.use('/promotions', promotionRoutes);
 router.use('/logs', logRoutes);
 router.use('/transactions', transactionRoutes);
 router.use('/contacts', contactRoutes);
 router.use('/wallets', walletRoutes);
+router.use('/solana', solanaRoutes);
 
 // Add more route modules here as your application grows
 // router.use('/v1/users', userRoutes);
 // router.use('/v1/wallets', walletRoutes);
 // router.use('/v1/transactions', transactionRoutes);
 
-module.exports = router; 
+export default router; 

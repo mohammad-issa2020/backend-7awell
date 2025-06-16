@@ -1,5 +1,6 @@
 import { beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import dotenv from 'dotenv';
+import { supabaseAdmin } from '../database/supabase.js';
 
 // Load environment variables for testing
 dotenv.config({ path: '.env.test' });
@@ -67,6 +68,10 @@ beforeAll(async () => {
   vi.mock('../utils/logger', () => ({
     default: mockLogger
   }));
+
+  // Clean up Supabase tables
+  await supabaseAdmin.from('wallets').delete().neq('id', 0);
+  await supabaseAdmin.from('contacts').delete().neq('id', 0);
 });
 
 // Clean up after all tests

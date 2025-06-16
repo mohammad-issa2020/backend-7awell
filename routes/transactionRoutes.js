@@ -1,7 +1,7 @@
-const express = require('express');
-const transactionController = require('../controllers/transactionController');
-const { authenticateToken } = require('../middleware/authMiddleware');
-const rateLimiter = require('../middleware/rateLimiter');
+import express from 'express';
+import transactionController from '../controllers/transactionController.js';
+import { authenticateToken } from '../middleware/authMiddleware.js';
+import rateLimiter from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
@@ -89,4 +89,4 @@ router.patch('/:id/status',
   transactionController.updateTransactionStatus
 );
 
-module.exports = router; 
+export default router; 

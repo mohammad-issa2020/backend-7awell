@@ -1,6 +1,6 @@
-const authService = require('../services/authService');
-const web3AuthService = require('../services/web3authService');
-const BaseResponse = require('../utils/baseResponse');
+import authService from '../services/authService.js';
+import web3AuthService from '../services/web3AuthService.js';
+import BaseResponse from '../utils/baseResponse.js';
 
 class AuthController {
   /**
@@ -29,132 +29,6 @@ class AuthController {
     }
   }
 
-  /**
-   * Send OTP to phone or email
-   * POST /auth/otp/send
-   */
-  async sendOTP(req, res) {
-    try {
-      const { medium, value, channel } = req.body;
-      
-      const result = await authService.sendOTP(medium, value, channel);
-      
-      return BaseResponse.success(
-        res,
-        result,
-        `OTP sent successfully via ${channel}`,
-        200
-      );
-    } catch (error) {
-      // Handle rate limiting errors
-      if (error.message.includes('Too many OTP requests')) {
-        return BaseResponse.rateLimitExceeded(
-          res,
-          error.message,
-          'OTP_RATE_LIMIT_EXCEEDED'
-        );
-      }
-      
-      return BaseResponse.error(
-        res,
-        'Failed to send OTP',
-        400,
-        error.message,
-        'OTP_SEND_FAILED'
-      );
-    }
-  }
-
-  /**
-   * Verify OTP code and create Stytch session + Auto-create wallet
-   * POST /auth/otp/verify
-   */
-  async verifyOTP(req, res) {
-    try {
-      const { medium, value, otp, autoCreateWallet = true } = req.body;
-      
-      const result = await authService.verifyOTP(medium, value, otp);
-      
-      // data for response
-      const responseData = {
-        valid: result.valid,
-        user: result.user,
-        session_token: result.session_token,
-        session_jwt: result.session_jwt,
-        message: 'OTP verified successfully. User authenticated.'
-      };
-
-      // if wallet creation is requested automatically (default: true)
-      if (autoCreateWallet && result.valid) {
-        try {
-          const walletData = await this.handleWalletCreation(result.user);
-          
-          if (walletData.success) {
-            responseData.wallet = walletData.wallet;
-            responseData.isNewWallet = walletData.isNewWallet;
-            responseData.web3auth = walletData.web3auth;
-            responseData.message = walletData.isNewWallet 
-              ? 'OTP verified, session created, and new wallet created successfully.'
-              : 'OTP verified, session created, and existing wallet retrieved.';
-          } else {
-            // if wallet creation fails, log the warning but don't fail the process
-            console.warn('⚠️ Wallet creation failed during OTP verification:', walletData.error);
-            responseData.walletError = walletData.error;
-            responseData.message += ' Note: Wallet setup can be completed later.';
-          }
-        } catch (walletError) {
-          console.warn('⚠️ Wallet creation error during OTP verification:', walletError.message);
-          responseData.walletError = walletError.message;
-          responseData.message += ' Note: Wallet setup can be completed later.';
-        }
-      }
-      
-      return BaseResponse.success(
-        res,
-        responseData,
-        'Authentication completed successfully'
-      );
-    } catch (error) {
-      // Handle specific OTP verification errors
-      if (error.message.includes('Too many failed attempts')) {
-        return BaseResponse.error(
-          res,
-          error.message,
-          429,
-          'Maximum verification attempts exceeded',
-          'OTP_MAX_ATTEMPTS_EXCEEDED'
-        );
-      }
-      
-      if (error.message.includes('Invalid OTP')) {
-        return BaseResponse.error(
-          res,
-          'Invalid OTP code',
-          400,
-          error.message,
-          'INVALID_OTP'
-        );
-      }
-      
-      if (error.message.includes('not found or expired')) {
-        return BaseResponse.error(
-          res,
-          'OTP session expired',
-          400,
-          error.message,
-          'OTP_EXPIRED'
-        );
-      }
-      
-      return BaseResponse.error(
-        res,
-        'OTP verification failed',
-        400,
-        error.message,
-        'OTP_VERIFICATION_FAILED'
-      );
-    }
-  }
 
 
   async handleWalletCreation(user) {
@@ -162,25 +36,28 @@ class AuthController {
       const Wallet = require('../models/Wallet');
       const { logUserActivity } = require('../services/activityService');
       
-      // 1. check if user has a wallet
+      // Only check if user has an existing wallet - don't create new ones
       const existingWallet = await Wallet.getPrimaryWallet(user.id);
       
       if (existingWallet) {
-        // wallet exists - retrieve data and create JWT
+        // Wallet exists - retrieve data and create JWT
         console.log('✅ Existing wallet found for user:', user.id);
         
-        // update last used
+        // Update last used
         await Wallet.updateLastUsed(existingWallet.id);
         
-        // create JWT for Web3Auth
-        const web3AuthToken = web3AuthService.createCustomJWT(user, user);
+        // Determine login method based on user data
+        const loginMethod = user.email ? 'email' : 'phone';
         
-        // log activity
+        // Create JWT for Web3Auth
+        const web3AuthToken = web3AuthService.createCustomJWT(user, loginMethod);
+        
+        // Log activity
         await logUserActivity(
           user.id,
           'Wallet accessed during login',
           'auth_login',
-          { wallet_address: existingWallet.address }
+          { wallet_address: existingWallet.address, login_method: loginMethod }
         );
         
         return {
@@ -198,74 +75,32 @@ class AuthController {
           },
           web3auth: {
             token: web3AuthToken,
-            verifier: web3AuthService.web3AuthVerifier,
+            verifier: web3AuthService.verifiers[loginMethod],
             clientId: web3AuthService.web3AuthClientId,
-            expiresIn: 24 * 60 * 60 // 24 hours
+            expiresIn: 24 * 60 * 60, // 24 hours
+            loginMethod: loginMethod
           }
         };
       } else {
-        // no wallet - create new wallet via Web3Auth simulation
-        console.log('🆕 Creating new wallet for user:', user.id);
+        // No wallet found - return Web3Auth config for frontend wallet creation
+        console.log('ℹ️ No wallet found for user:', user.id, '- Frontend should handle wallet creation');
         
-        // create JWT first
-        const web3AuthToken = web3AuthService.createCustomJWT(user, user);
+        // Determine login method based on user data
+        const loginMethod = user.email ? 'email' : 'phone';
         
-        // simulate wallet creation (will be done via Web3Auth in Frontend)
-        // create placeholder record to be updated later
-        const placeholderAddress = this.generatePlaceholderAddress(user.id);
-        
-        const newWallet = await Wallet.create({
-          userId: user.id,
-          address: placeholderAddress,
-          network: 'ethereum',
-          provider: 'web3auth',
-          backupMethods: ['device']
-        });
-        
-        // update user table
-        await web3AuthService.createWallet(user.id, {
-          address: placeholderAddress,
-          network: 'ethereum',
-          provider: 'web3auth'
-        });
-        
-        // log activity
-        await logUserActivity(
-          user.id,
-          'New wallet created during login',
-          'wallet_created',
-          {
-            wallet_address: placeholderAddress,
-            network: 'ethereum',
-            provider: 'web3auth'
-          }
-        );
+        // Create integration data for frontend
+        const integrationData = web3AuthService.createWalletIntegration(user, loginMethod);
         
         return {
           success: true,
-          isNewWallet: true,
-          wallet: {
-            id: newWallet.id,
-            address: newWallet.address,
-            network: newWallet.network,
-            provider: newWallet.provider,
-            status: newWallet.status,
-            createdAt: newWallet.created_at,
-            lastUsed: newWallet.last_used,
-            isPrimary: true,
-            needsRealAddress: true // placeholder address
-          },
-          web3auth: {
-            token: web3AuthToken,
-            verifier: web3AuthService.web3AuthVerifier,
-            clientId: web3AuthService.web3AuthClientId,
-            expiresIn: 24 * 60 * 60,
-            setupRequired: true // setup required in Frontend
-          }
+          isNewWallet: false,
+          hasWallet: false,
+          message: 'No wallet found. Use Web3Auth in frontend to create wallet.',
+          ...integrationData
         };
       }
     } catch (error) {
-      console.error('❌ Error in wallet creation/retrieval:', error);
+      console.error('❌ Error in wallet retrieval:', error);
       return {
         success: false,
         error: error.message
@@ -817,6 +652,190 @@ class AuthController {
       );
     }
   }
+
+  /**
+   * Create wallet for authenticated user
+   * POST /auth/create-wallet
+   * This endpoint saves wallet data after Web3Auth creates it in the frontend
+   */
+  async createWallet(req, res) {
+    try {
+      // User must be authenticated
+      if (!req.user) {
+        return BaseResponse.unauthorized(
+          res,
+          'Authentication required to create wallet',
+          'AUTH_REQUIRED'
+        );
+      }
+
+      const { address, network = 'ethereum', provider = 'web3auth', publicKey, backupMethods = ['device'] } = req.body;
+
+      // Validate required fields
+      if (!address) {
+        return BaseResponse.error(
+          res,
+          'Wallet address is required',
+          400,
+          'address field is required when saving wallet data',
+          'MISSING_WALLET_ADDRESS'
+        );
+      }
+
+      // Check if user already has a wallet
+      const Wallet = require('../models/Wallet');
+      const existingWallet = await Wallet.getPrimaryWallet(req.user.id);
+      
+      if (existingWallet) {
+        return BaseResponse.error(
+          res,
+          'User already has a wallet',
+          400,
+          'A primary wallet already exists for this user',
+          'WALLET_ALREADY_EXISTS'
+        );
+      }
+
+      // Save wallet data (created by Web3Auth in frontend)
+      const newWallet = await Wallet.create({
+        userId: req.user.id,
+        address: address,
+        network: network,
+        provider: provider,
+        publicKey: publicKey,
+        backupMethods: backupMethods
+      });
+
+      // Log activity
+      const { logUserActivity } = require('../services/activityService');
+      await logUserActivity(
+        req.user.id,
+        'Wallet created and saved',
+        'wallet_created',
+        {
+          wallet_address: address,
+          network: network,
+          provider: provider
+        }
+      );
+
+      // Create Web3Auth token
+      const web3AuthToken = web3AuthService.createCustomJWT(req.user, req.user);
+
+      return BaseResponse.success(
+        res,
+        {
+          wallet: {
+            id: newWallet.id,
+            address: newWallet.address,
+            network: newWallet.network,
+            provider: newWallet.provider,
+            status: newWallet.status,
+            createdAt: newWallet.created_at,
+            lastUsed: newWallet.last_used,
+            isPrimary: true
+          },
+          web3auth: {
+            token: web3AuthToken,
+            verifier: web3AuthService.web3AuthVerifier,
+            clientId: web3AuthService.web3AuthClientId,
+            expiresIn: 24 * 60 * 60
+          }
+        },
+        'Wallet saved successfully'
+      );
+    } catch (error) {
+      console.error('❌ Error saving wallet:', error);
+      return BaseResponse.error(
+        res,
+        'Failed to save wallet',
+        500,
+        error.message,
+        'WALLET_SAVE_ERROR'
+      );
+    }
+  }
+
+  /**
+   * Get user's wallet information
+   * GET /auth/wallet
+   */
+  async getWallet(req, res) {
+    try {
+      // User must be authenticated
+      if (!req.user) {
+        return BaseResponse.unauthorized(
+          res,
+          'Authentication required to access wallet',
+          'AUTH_REQUIRED'
+        );
+      }
+
+      const Wallet = require('../models/Wallet');
+      const wallet = await Wallet.getPrimaryWallet(req.user.id);
+      
+      if (!wallet) {
+        // Determine login method based on user data
+        const loginMethod = req.user.email ? 'email' : 'phone';
+        
+        // Create integration data for frontend wallet creation
+        const integrationData = web3AuthService.createWalletIntegration(req.user, loginMethod);
+        
+        return BaseResponse.success(
+          res,
+          {
+            hasWallet: false,
+            message: 'No wallet found for this user',
+            ...integrationData
+          },
+          'Wallet status retrieved - ready for creation'
+        );
+      }
+
+      // Update last used
+      await Wallet.updateLastUsed(wallet.id);
+
+      // Determine login method based on user data
+      const loginMethod = req.user.email ? 'email' : 'phone';
+
+      // Create Web3Auth token if needed
+      const web3AuthToken = web3AuthService.createCustomJWT(req.user, loginMethod);
+
+      return BaseResponse.success(
+        res,
+        {
+          hasWallet: true,
+          wallet: {
+            id: wallet.id,
+            address: wallet.address,
+            network: wallet.network,
+            provider: wallet.provider,
+            status: wallet.status,
+            createdAt: wallet.created_at,
+            lastUsed: wallet.last_used,
+            isPrimary: true
+          },
+          web3auth: {
+            token: web3AuthToken,
+            verifier: web3AuthService.verifiers[loginMethod],
+            clientId: web3AuthService.web3AuthClientId,
+            expiresIn: 24 * 60 * 60,
+            loginMethod: loginMethod
+          }
+        },
+        'Wallet information retrieved successfully'
+      );
+    } catch (error) {
+      console.error('❌ Error retrieving wallet:', error);
+      return BaseResponse.error(
+        res,
+        'Failed to retrieve wallet information',
+        500,
+        error.message,
+        'WALLET_RETRIEVAL_ERROR'
+      );
+    }
+  }
 }
 
-module.exports = new AuthController(); 
+export default new AuthController(); 

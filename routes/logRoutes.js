@@ -1,7 +1,7 @@
-const express = require('express');
-const logController = require('../controllers/logController');
-const { authenticateToken } = require('../middleware/authMiddleware');
-const rateLimiter = require('../middleware/rateLimiter');
+import express from 'express';
+import logController from '../controllers/logController.js';
+import { authenticateToken } from '../middleware/authMiddleware.js';
+import rateLimiter from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
@@ -102,4 +102,4 @@ router.get('/types',
   logController.getTypes // No rate limit for this simple endpoint
 );
 
-module.exports = router; 
+export default router; 

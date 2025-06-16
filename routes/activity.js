@@ -1,9 +1,10 @@
-const express = require('express');
+import express from 'express';
+import ActivityLogger, { ACTIVITY_TYPES, RISK_LEVELS } from '../services/activityLogger.js';
+import { authenticateToken } from '../middleware/authMiddleware.js';
+import rateLimiter from '../middleware/rateLimiter.js';
+import { activityLogger, securityActivityLogger } from '../middleware/activityMiddleware.js';
+
 const router = express.Router();
-const { ActivityLogger, ACTIVITY_TYPES, RISK_LEVELS } = require('../services/activityLogger');
-const { authenticateToken } = require('../middleware/authMiddleware');
-const rateLimiter = require('../middleware/rateLimiter');
-const { activityLogger, securityActivityLogger } = require('../middleware/activityMiddleware');
 
 // Apply rate limiting to all activity routes
 router.use(rateLimiter.createLimiter({ windowMs: 15 * 60 * 1000, max: 100 })); // 100 requests per 15 minutes
@@ -386,4 +387,4 @@ router.get('/export',
     }
 );
 
-module.exports = router; 
+export default router; 

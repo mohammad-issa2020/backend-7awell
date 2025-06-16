@@ -1,4 +1,4 @@
-const { supabaseAdmin } = require('../database/supabase');
+import { supabaseAdmin } from '../database/supabase.js';
 
 /**
  * Simple activity logging service
@@ -84,11 +84,14 @@ class ActivityService {
 
 // Export the logUserActivity function directly for compatibility
 const logUserActivity = ActivityService.logUserActivity.bind(ActivityService);
+const logContactActivity = ActivityService.logContactActivity.bind(ActivityService);
+const logAuthActivity = ActivityService.logAuthActivity.bind(ActivityService);
+const logTransactionActivity = ActivityService.logTransactionActivity.bind(ActivityService);
 
-module.exports = {
-  ActivityService,
+export default ActivityService;
+export {
   logUserActivity,
-  logContactActivity: ActivityService.logContactActivity.bind(ActivityService),
-  logAuthActivity: ActivityService.logAuthActivity.bind(ActivityService),
-  logTransactionActivity: ActivityService.logTransactionActivity.bind(ActivityService)
+  logContactActivity,
+  logAuthActivity,
+  logTransactionActivity
 }; 

@@ -1,6 +1,6 @@
-const Contact = require('../models/Contact');
-const BaseResponse = require('../utils/baseResponse');
-const { logUserActivity } = require('../services/activityService');
+import Contact from '../models/Contact.js';
+import BaseResponse from '../utils/baseResponse.js';
+import { logUserActivity } from '../services/activityService.js';
 
 class ContactController {
   /**
@@ -489,4 +489,4 @@ class ContactController {
   }
 }
 
-module.exports = new ContactController(); 
+export default new ContactController(); 

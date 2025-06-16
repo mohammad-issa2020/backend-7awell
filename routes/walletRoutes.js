@@ -1,8 +1,8 @@
-const express = require('express');
-const { body, param, query, validationResult } = require('express-validator');
-const walletController = require('../controllers/walletController');
-const { authenticateToken } = require('../middleware/authMiddleware');
-const BaseResponse = require('../utils/baseResponse');
+import express from 'express';
+import { body, param, query, validationResult } from 'express-validator';
+import walletController from '../controllers/walletController.js';
+import { authenticateToken } from '../middleware/authMiddleware.js';
+import BaseResponse from '../utils/baseResponse.js';
 
 const router = express.Router();
 
@@ -62,7 +62,6 @@ router.get('/status',
  */
 router.get('/stats',
   authenticateToken,
-  // يمكن إضافة middleware للتحقق من صلاحيات الإدارة هنا
   walletController.getWalletStatistics
 );
 
@@ -251,4 +250,12 @@ router.delete('/:walletId',
   walletController.deactivateWallet
 );
 
-module.exports = router; 
+/**
+ * ✅ Check Web3Auth configuration status
+ * GET /api/wallets/web3auth/status
+ */
+router.get('/web3auth/status',
+  walletController.getWeb3AuthStatus
+);
+
+export default router; 

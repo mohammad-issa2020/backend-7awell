@@ -1,4 +1,4 @@
-const { supabaseAdmin } = require('../database/supabase');
+import { supabaseAdmin } from '../database/supabase.js';
 
 class UserMappingService {
   /**
@@ -218,4 +218,4 @@ class UserMappingService {
   }
 }
 
-module.exports = UserMappingService; 
+export default UserMappingService; 

@@ -1,5 +1,5 @@
-const { supabase } = require('../database/supabase');
-const ActivityLogger = require('./activityLogger');
+import { supabase } from '../database/supabase.js';
+import ActivityLogger from './activityLogger.js';
 
 // Client event types that can't be automatically tracked on server
 const CLIENT_EVENT_TYPES = {
@@ -399,6 +399,5 @@ class ClientLogService {
   }
 }
 
-module.exports = ClientLogService;
-module.exports.CLIENT_EVENT_TYPES = CLIENT_EVENT_TYPES;
-module.exports.CLIENT_LOG_CATEGORIES = CLIENT_LOG_CATEGORIES; 
+export default ClientLogService;
+export { CLIENT_EVENT_TYPES, CLIENT_LOG_CATEGORIES }; 

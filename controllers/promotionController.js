@@ -1,6 +1,6 @@
-const promotionService = require('../services/promotionService');
-const { createSuccessResponse, createErrorResponse } = require('../utils/baseResponse');
-const Promotion = require('../models/Promotion');
+import promotionService from '../services/promotionService.js';
+import { createSuccessResponse, createErrorResponse } from '../utils/baseResponse.js';
+import Promotion from '../models/Promotion.js';
 
 class PromotionController {
   /**
@@ -324,4 +324,4 @@ class PromotionController {
   }
 }
 
-module.exports = new PromotionController(); 
+export default new PromotionController(); 

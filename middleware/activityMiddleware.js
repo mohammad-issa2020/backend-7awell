@@ -1,4 +1,4 @@
-const { ActivityLogger, ACTIVITY_TYPES, RISK_LEVELS } = require('../services/activityLogger');
+import ActivityLogger, { ACTIVITY_TYPES, RISK_LEVELS } from '../services/activityLogger.js';
 
 /**
  * Middleware to automatically log user activities
@@ -240,7 +240,7 @@ const suspiciousActivityTracker = () => {
     };
 };
 
-module.exports = {
+export {
     activityLogger,
     authActivityLogger,
     transactionActivityLogger,

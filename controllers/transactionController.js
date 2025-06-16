@@ -1,6 +1,20 @@
-const TransactionService = require('../services/transactionService');
-const { TRANSACTION_TYPES, TRANSACTION_STATUS } = require('../services/transactionService');
-const { createSuccessResponse, createErrorResponse } = require('../utils/baseResponse');
+import TransactionService, { TRANSACTION_TYPES, TRANSACTION_STATUS } from '../services/transactionService.js';
+import { createSuccessResponse, createErrorResponse } from '../utils/baseResponse.js';
+import { z } from "zod";
+
+// message error code add 
+const transactionSchema = z.object({
+  userId: z.string(),
+  type: z.string(),
+  amount: z.number(),
+  assetSymbol: z.string(),
+  assetName: z.string().optional(),
+  network: z.string(),
+  fromAddress: z.string().optional(),
+  toAddress: z.string().optional(),
+  description: z.string().optional(),
+  metadata: z.record(z.any()).optional(),
+});
 
 class TransactionController {
   /**
@@ -280,16 +294,6 @@ class TransactionController {
         metadata = {}
       } = req.body;
 
-      // Validate required fields
-      if (!type || !amount || !assetSymbol || !network) {
-        return res.status(400).json(createErrorResponse(
-          'Missing required fields: type, amount, assetSymbol, network',
-          'INVALID_PARAMETER',
-          400
-        ));
-      }
-
-      // Validate transaction data
       const transactionData = {
         userId,
         type,
@@ -303,10 +307,13 @@ class TransactionController {
         metadata
       };
 
-      const validation = TransactionService.validateTransactionData(transactionData);
-      if (!validation.isValid) {
+      // Zod validation add // error code 
+      const parseResult = transactionSchema.safeParse(transactionData);
+      
+      if (!parseResult.success) {
+        const errors = parseResult.error.errors.map(e => e.message).join(', ');
         return res.status(400).json(createErrorResponse(
-          `Validation failed: ${validation.errors.join(', ')}`,
+          `Validation failed: ${errors}`,
           'VALIDATION_ERROR',
           400
         ));
@@ -427,4 +434,4 @@ class TransactionController {
   }
 }
 
-module.exports = new TransactionController(); 
+export default new TransactionController(); 
