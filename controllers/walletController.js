@@ -1,4 +1,4 @@
-import web3AuthService from '../services/web3AuthService.js';
+// import web3AuthService from '../services/web3AuthService.js';
 import Wallet from '../models/Wallet.js';
 import BaseResponse from '../utils/baseResponse.js';
 import { logUserActivity } from '../services/activityService.js';
@@ -16,22 +16,22 @@ class WalletController {
       const user = req.user;
 
       // create custom JWT for user
-      const customJWT = web3AuthService.createCustomJWT(user, user);
+      // const customJWT = web3AuthService.createCustomJWT(user, user);
 
       // log activity
       await logUserActivity(
         user.id,
         'Web3Auth JWT created',
         'auth_login',
-        { verifier: web3AuthService.web3AuthVerifier }
+        // { verifier: web3AuthService.web3AuthVerifier }
       );
 
       return BaseResponse.success(
         res,
         {
           token: customJWT,
-          verifier: web3AuthService.web3AuthVerifier,
-          clientId: web3AuthService.web3AuthClientId,
+          // verifier: web3AuthService.web3AuthVerifier,
+          // clientId: web3AuthService.web3AuthClientId,
           expiresIn: 24 * 60 * 60 // 24 hours in seconds
         },
         'Authentication token created successfully'
@@ -89,11 +89,11 @@ class WalletController {
       });
 
       // update user table
-      await web3AuthService.createWallet(userId, {
-        address,
-        network,
-        provider: 'web3auth'
-      });
+      // await web3AuthService.createWallet(userId, {
+      //   address,
+      //   network,
+      //   provider: 'web3auth'
+      // });
 
       // log activity
       await logUserActivity(
@@ -460,7 +460,7 @@ class WalletController {
     try {
       const { network = 'ethereum' } = req.query;
 
-      const config = web3AuthService.getClientConfig(network);
+      // const config = web3AuthService.getClientConfig(network);
 
       return BaseResponse.success(
         res,
@@ -500,7 +500,7 @@ class WalletController {
         );
       }
 
-      const recoveryLink = web3AuthService.generateRecoveryLink(userId, wallet.address);
+      // const recoveryLink = web3AuthService.generateRecoveryLink(userId, wallet.address);
 
       // log activity
       await logUserActivity(
@@ -552,7 +552,7 @@ class WalletController {
         );
       }
 
-      const recoveryData = web3AuthService.verifyRecoveryLink(token);
+      // const recoveryData = web3AuthService.verifyRecoveryLink(token);
 
       if (!recoveryData) {
         return BaseResponse.error(
@@ -739,11 +739,11 @@ class WalletController {
       });
 
       // update user table
-      await web3AuthService.createWallet(userId, {
-        address: address.toLowerCase(),
-        network: wallet.network,
-        provider: wallet.provider
-      });
+      // await web3AuthService.createWallet(userId, {
+      //   address: address.toLowerCase(),
+      //   network: wallet.network,
+      //   provider: wallet.provider
+      // });
 
       // log activity
       await logUserActivity(
@@ -783,7 +783,7 @@ class WalletController {
    */
   async getWeb3AuthStatus(req, res) {
     try {
-      const status = web3AuthService.getConfigurationStatus();
+      // const status = web3AuthService.getConfigurationStatus();
       
       return BaseResponse.success(
         res,

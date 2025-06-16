@@ -1,5 +1,5 @@
 import authService from '../services/authService.js';
-import web3AuthService from '../services/web3AuthService.js';
+// import web3AuthService from '../services/web3AuthService.js';
 import BaseResponse from '../utils/baseResponse.js';
 
 class AuthController {
@@ -50,7 +50,7 @@ class AuthController {
         const loginMethod = user.email ? 'email' : 'phone';
         
         // Create JWT for Web3Auth
-        const web3AuthToken = web3AuthService.createCustomJWT(user, loginMethod);
+        // const web3AuthToken = web3AuthService.createCustomJWT(user, loginMethod);
         
         // Log activity
         await logUserActivity(
@@ -75,8 +75,8 @@ class AuthController {
           },
           web3auth: {
             token: web3AuthToken,
-            verifier: web3AuthService.verifiers[loginMethod],
-            clientId: web3AuthService.web3AuthClientId,
+            // verifier: web3AuthService.verifiers[loginMethod],
+            // clientId: web3AuthService.web3AuthClientId,
             expiresIn: 24 * 60 * 60, // 24 hours
             loginMethod: loginMethod
           }
@@ -89,7 +89,7 @@ class AuthController {
         const loginMethod = user.email ? 'email' : 'phone';
         
         // Create integration data for frontend
-        const integrationData = web3AuthService.createWalletIntegration(user, loginMethod);
+        // const integrationData = web3AuthService.createWalletIntegration(user, loginMethod);
         
         return {
           success: true,
@@ -720,7 +720,7 @@ class AuthController {
       );
 
       // Create Web3Auth token
-      const web3AuthToken = web3AuthService.createCustomJWT(req.user, req.user);
+      // const web3AuthToken = web3AuthService.createCustomJWT(req.user, req.user);
 
       return BaseResponse.success(
         res,
@@ -737,8 +737,8 @@ class AuthController {
           },
           web3auth: {
             token: web3AuthToken,
-            verifier: web3AuthService.web3AuthVerifier,
-            clientId: web3AuthService.web3AuthClientId,
+            // verifier: web3AuthService.web3AuthVerifier,
+            // clientId: web3AuthService.web3AuthClientId,
             expiresIn: 24 * 60 * 60
           }
         },
@@ -779,7 +779,7 @@ class AuthController {
         const loginMethod = req.user.email ? 'email' : 'phone';
         
         // Create integration data for frontend wallet creation
-        const integrationData = web3AuthService.createWalletIntegration(req.user, loginMethod);
+        // const integrationData = web3AuthService.createWalletIntegration(req.user, loginMethod);
         
         return BaseResponse.success(
           res,
@@ -799,7 +799,7 @@ class AuthController {
       const loginMethod = req.user.email ? 'email' : 'phone';
 
       // Create Web3Auth token if needed
-      const web3AuthToken = web3AuthService.createCustomJWT(req.user, loginMethod);
+      // const web3AuthToken = web3AuthService.createCustomJWT(req.user, loginMethod);
 
       return BaseResponse.success(
         res,
@@ -817,8 +817,8 @@ class AuthController {
           },
           web3auth: {
             token: web3AuthToken,
-            verifier: web3AuthService.verifiers[loginMethod],
-            clientId: web3AuthService.web3AuthClientId,
+            // verifier: web3AuthService.verifiers[loginMethod],
+            // clientId: web3AuthService.web3AuthClientId,
             expiresIn: 24 * 60 * 60,
             loginMethod: loginMethod
           }
