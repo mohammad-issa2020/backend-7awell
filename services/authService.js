@@ -456,10 +456,10 @@ class AuthService {
     }
   }
 
-  /**
+    /**
    * Send OTP to email
    * @param {string} email - Email address
-   * @returns {Object} Stytch response  
+   * @returns {Object} Stytch response with method_id
    */
   async sendEmailOTP(email) {
     try {
@@ -472,7 +472,12 @@ class AuthService {
         throw new Error('Failed to send email OTP');
       }
       
-      return result;
+      console.log('✅ Email OTP sent successfully');
+      // Email returns email_id, we need to map it to method_id for consistency
+      return { 
+        ...result, 
+        method_id: result.email_id // Map email_id to method_id for authenticate
+      };
     } catch (error) {
       throw new Error(`Email OTP error: ${error.message}`);
     }
@@ -700,7 +705,7 @@ class AuthService {
       session.email = email;
       session.emailAvailable = emailAvailability.available;
       session.step = 'email_verification';
-      session.stytchEmailId = emailResult.request_id;
+      session.stytchEmailId = emailResult.method_id; // Use method_id for authenticate
       this.sequentialAuthSessions.set(sessionId, session);
       
       console.log('✅ Email OTP sent for session:', sessionId);
@@ -761,9 +766,12 @@ class AuthService {
         throw new Error('Maximum email OTP attempts exceeded');
       }
       
-      // Verify email OTP with Stytch
+      // Verify email OTP with Stytch - using unified authenticate method
       try {
-        const emailResult = await stytchClient.otps.email.authenticate({
+        console.log('🔐 Verifying email OTP...');
+        
+        // Stytch uses a single authenticate method for all OTP types
+        const emailResult = await stytchClient.otps.authenticate({
           method_id: session.stytchEmailId,
           code: otp
         });
@@ -792,7 +800,7 @@ class AuthService {
             query: {
               operator: 'OR',
               operands: [
-                { filter_name: 'phone_number', filter_value: [session.phoneNumber] },
+                { filter_name: 'phone', filter_value: [session.phoneNumber] },
                 { filter_name: 'email', filter_value: [session.email] }
               ]
             }
