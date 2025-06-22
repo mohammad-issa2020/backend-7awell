@@ -356,9 +356,50 @@ class AuthService {
     }
   }
 
+  /**
+   * Check if a key is rate limited
+   * @param {string} key - Rate limit key (phone number, user ID, etc.)
+   * @returns {boolean} True if rate limited
+   */
+  isRateLimited(key) {
+    const now = Date.now();
+    const rateLimit = this.rateLimitStore.get(key);
+    
+    if (!rateLimit) {
+      return false;
+    }
+    
+    // Check if rate limit window has expired
+    if (now >= rateLimit.resetTime) {
+      this.rateLimitStore.delete(key);
+      return false;
+    }
+    
+    // Check if we've exceeded the limit
+    return rateLimit.count >= this.OTP_RATE_LIMIT;
+  }
 
-
-
+  /**
+   * Update rate limit for a key
+   * @param {string} key - Rate limit key
+   */
+  updateRateLimit(key) {
+    const now = Date.now();
+    const windowMs = 5 * 60 * 1000; // 5 minutes
+    const existing = this.rateLimitStore.get(key);
+    
+    if (existing && now < existing.resetTime) {
+      // Within same window, increment count
+      existing.count++;
+      this.rateLimitStore.set(key, existing);
+    } else {
+      // New window, reset count
+      this.rateLimitStore.set(key, {
+        count: 1,
+        resetTime: now + windowMs
+      });
+    }
+  }
 
   /**
    * Send OTP to phone number
