@@ -600,43 +600,21 @@ class AuthService {
         throw new Error('Maximum phone OTP attempts exceeded');
       }
       
-      // Verify phone OTP with Stytch using the correct method type
+      // Verify phone OTP with Stytch - using unified authenticate method
       try {
-        let phoneResult;
-        
         console.log(`🔐 Verifying OTP using ${session.phoneMethodType} method...`);
         
-        if (session.phoneMethodType === 'whatsapp') {
-          // Use WhatsApp verification
-          phoneResult = await stytchClient.otps.whatsapp.authenticate({
-            method_id: session.stytchPhoneId,
-            code: otp
-          });
-          
-          if (phoneResult.status_code === 200) {
-            console.log('✅ WhatsApp OTP verified successfully');
-          } else {
-            throw new Error('Invalid WhatsApp OTP');
-          }
-        } else if (session.phoneMethodType === 'sms') {
-          // Use SMS verification
-          phoneResult = await stytchClient.otps.sms.authenticate({
-            method_id: session.stytchPhoneId,
-            code: otp
-          });
-          
-          if (phoneResult.status_code === 200) {
-            console.log('✅ SMS OTP verified successfully');
-          } else {
-            throw new Error('Invalid SMS OTP');
-          }
-        } else {
-          throw new Error('Unknown phone method type');
-        }
+        // Stytch uses a single authenticate method for all OTP types
+        const phoneResult = await stytchClient.otps.authenticate({
+          method_id: session.stytchPhoneId,
+          code: otp
+        });
         
         if (phoneResult.status_code !== 200) {
           throw new Error('Invalid OTP');
         }
+        
+        console.log(`✅ ${session.phoneMethodType.toUpperCase()} OTP verified successfully`);
         
         // Update session
         session.phoneVerified = true;
@@ -1002,43 +980,21 @@ class AuthService {
         throw new Error('Maximum current phone OTP attempts exceeded');
       }
       
-      // Verify current phone OTP with Stytch using the correct method type
+      // Verify current phone OTP with Stytch - using unified authenticate method
       try {
-        let currentPhoneResult;
-        
         console.log(`🔐 Verifying current phone OTP using ${session.currentPhoneMethodType} method...`);
         
-        if (session.currentPhoneMethodType === 'whatsapp') {
-          // Use WhatsApp verification
-          currentPhoneResult = await stytchClient.otps.whatsapp.authenticate({
-            method_id: session.stytchCurrentPhoneId,
-            code: otp
-          });
-          
-          if (currentPhoneResult.status_code === 200) {
-            console.log('✅ Current phone WhatsApp OTP verified successfully');
-          } else {
-            throw new Error('Invalid current phone WhatsApp OTP');
-          }
-        } else if (session.currentPhoneMethodType === 'sms') {
-          // Use SMS verification
-          currentPhoneResult = await stytchClient.otps.sms.authenticate({
-            method_id: session.stytchCurrentPhoneId,
-            code: otp
-          });
-          
-          if (currentPhoneResult.status_code === 200) {
-            console.log('✅ Current phone SMS OTP verified successfully');
-          } else {
-            throw new Error('Invalid current phone SMS OTP');
-          }
-        } else {
-          throw new Error('Unknown current phone method type');
-        }
+        // Stytch uses a single authenticate method for all OTP types
+        const currentPhoneResult = await stytchClient.otps.authenticate({
+          method_id: session.stytchCurrentPhoneId,
+          code: otp
+        });
         
         if (currentPhoneResult.status_code !== 200) {
           throw new Error('Invalid OTP');
         }
+        
+        console.log(`✅ Current phone ${session.currentPhoneMethodType.toUpperCase()} OTP verified successfully`);
         
         // Send OTP to new phone
         console.log('📤 Sending OTP to new phone:', session.newPhoneNumber);
@@ -1121,43 +1077,21 @@ class AuthService {
         throw new Error('Maximum new phone OTP attempts exceeded');
       }
       
-      // Verify new phone OTP with Stytch using the correct method type
+      // Verify new phone OTP with Stytch - using unified authenticate method
       try {
-        let newPhoneResult;
-        
         console.log(`🔐 Verifying new phone OTP using ${session.newPhoneMethodType} method...`);
         
-        if (session.newPhoneMethodType === 'whatsapp') {
-          // Use WhatsApp verification
-          newPhoneResult = await stytchClient.otps.whatsapp.authenticate({
-            method_id: session.stytchNewPhoneId,
-            code: otp
-          });
-          
-          if (newPhoneResult.status_code === 200) {
-            console.log('✅ New phone WhatsApp OTP verified successfully');
-          } else {
-            throw new Error('Invalid new phone WhatsApp OTP');
-          }
-        } else if (session.newPhoneMethodType === 'sms') {
-          // Use SMS verification
-          newPhoneResult = await stytchClient.otps.sms.authenticate({
-            method_id: session.stytchNewPhoneId,
-            code: otp
-          });
-          
-          if (newPhoneResult.status_code === 200) {
-            console.log('✅ New phone SMS OTP verified successfully');
-          } else {
-            throw new Error('Invalid new phone SMS OTP');
-          }
-        } else {
-          throw new Error('Unknown new phone method type');
-        }
+        // Stytch uses a single authenticate method for all OTP types
+        const newPhoneResult = await stytchClient.otps.authenticate({
+          method_id: session.stytchNewPhoneId,
+          code: otp
+        });
         
         if (newPhoneResult.status_code !== 200) {
           throw new Error('Invalid OTP');
         }
+        
+        console.log(`✅ New phone ${session.newPhoneMethodType.toUpperCase()} OTP verified successfully`);
         
         // Both phones verified - update user's phone number in Stytch
         console.log('🔄 Updating phone number in Stytch...');
