@@ -785,55 +785,21 @@ class AuthService {
         
         console.log('✅ Email OTP verified successfully');
         
-        // Both phone and email verified - proceed with user creation/login
-        let stytchUser;
-        
-        if (session.phoneAvailable && session.emailAvailable) {
-          // Create new user
-          console.log('👤 Creating new Stytch user...');
-          const createResult = await stytchClient.users.create({
-            phone_number: session.phoneNumber,
-            email: session.email
-          });
-          stytchUser = createResult.user;
-        } else {
-          // Find existing user - only search by phone since email search is not supported
-          console.log('🔍 Finding existing Stytch user by phone...');
-          const searchResult = await stytchClient.users.search({
-            query: {
-              operator: 'AND',
-              operands: [
-                { filter_name: 'phone_number', filter_value: [session.phoneNumber] }
-              ]
-            }
-          });
-          
-          if (searchResult.results?.length > 0) {
-            stytchUser = searchResult.results[0];
-          } else {
-            // If not found by phone, try to create the user
-            console.log('👤 User not found by phone, creating new user...');
-            const createResult = await stytchClient.users.create({
-              phone_number: session.phoneNumber,
-              email: session.email
-            });
-            stytchUser = createResult.user;
-          }
-        }
-        
-        // Create Stytch session
-        console.log('🔑 Creating Stytch session...');
-        const stytchSession = await stytchClient.sessions.create({
-          user_id: stytchUser.user_id
-        });
+        // The email OTP verification already provides a session token and user info
+        const stytchUser = emailResult.user;
+        const stytchSession = {
+          session_token: emailResult.session_token,
+          session_jwt: emailResult.session_jwt,
+          session: emailResult.session
+        };
         
         // Create or get user in Supabase
         console.log('💾 Creating/updating user in Supabase...');
         const UserMappingService = (await import('../services/userMappingService.js')).default;
         const supabaseUser = await UserMappingService.createOrGetUser({
           id: stytchUser.user_id,
-          phoneNumber: session.phoneNumber,
-          email: session.email,
+          phoneNumber: stytchUser.phone_numbers?.[0]?.phone_number || session.phoneNumber,
+          email: stytchUser.emails?.[0]?.email || session.email,
           created_at: stytchUser.created_at,
           status: stytchUser.status
         });
@@ -847,16 +813,16 @@ class AuthService {
           user: {
             id: supabaseUser.id,
             stytch_user_id: stytchUser.user_id,
-            phoneNumber: session.phoneNumber,
-            email: session.email,
+            phoneNumber: stytchUser.phone_numbers?.[0]?.phone_number || session.phoneNumber,
+            email: stytchUser.emails?.[0]?.email || session.email,
             created_at: supabaseUser.created_at,
             status: supabaseUser.status
           },
           session: {
-            session_id: stytchSession.session.session_id,
+            session_id: stytchSession.session?.session_id,
             session_token: stytchSession.session_token,
             session_jwt: stytchSession.session_jwt,
-            expires_at: stytchSession.session.expires_at
+            expires_at: stytchSession.session?.expires_at
           },
           isNewUser: session.phoneAvailable && session.emailAvailable,
           message: 'Login completed successfully'
