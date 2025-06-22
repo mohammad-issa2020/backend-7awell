@@ -278,17 +278,32 @@ export const phoneLoginSchema = Joi.object({
 });
 
 export const phoneVerifySchema = Joi.object({
-  sessionId: Joi.string().uuid().required(),
+  sessionId: Joi.string()
+    .pattern(/^seq_auth_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+    .required()
+    .messages({
+      'string.pattern.base': '"sessionId" must be a valid sequential auth session ID'
+    }),
   otp: Joi.string().pattern(/^\d{6}$/).required()
 });
 
 export const emailLoginSchema = Joi.object({
-  sessionId: Joi.string().uuid().required(),
+  sessionId: Joi.string()
+    .pattern(/^seq_auth_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+    .required()
+    .messages({
+      'string.pattern.base': '"sessionId" must be a valid sequential auth session ID'
+    }),
   email: Joi.string().email().required()
 });
 
 export const emailVerifySchema = Joi.object({
-  sessionId: Joi.string().uuid().required(),
+  sessionId: Joi.string()
+    .pattern(/^seq_auth_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+    .required()
+    .messages({
+      'string.pattern.base': '"sessionId" must be a valid sequential auth session ID'
+    }),
   otp: Joi.string().pattern(/^\d{6}$/).required()
 });
 
@@ -311,12 +326,22 @@ export const phoneChangeStartSchema = Joi.object({
 });
 
 export const phoneChangeVerifyOldSchema = Joi.object({
-  sessionId: Joi.string().uuid().required(),
+  sessionId: Joi.string()
+    .pattern(/^phone_change_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+    .required()
+    .messages({
+      'string.pattern.base': '"sessionId" must be a valid phone change session ID'
+    }),
   otp: Joi.string().pattern(/^\d{6}$/).required()
 });
 
 export const phoneChangeVerifyNewSchema = Joi.object({
-  sessionId: Joi.string().uuid().required(),
+  sessionId: Joi.string()
+    .pattern(/^phone_change_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+    .required()
+    .messages({
+      'string.pattern.base': '"sessionId" must be a valid phone change session ID'
+    }),
   otp: Joi.string().pattern(/^\d{6}$/).required()
 });
 
