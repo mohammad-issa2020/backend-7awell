@@ -776,7 +776,8 @@ class AuthService {
         // Stytch uses a single authenticate method for all OTP types
         const emailResult = await stytchClient.otps.authenticate({
           method_id: session.stytchEmailId,
-          code: otp
+          code: otp,
+          session_duration_minutes: 60 // Create a session that lasts 1 hour
         });
         
         if (emailResult.status_code !== 200) {
