@@ -402,24 +402,47 @@ class AuthService {
   }
 
   /**
-   * Send OTP to phone number
+   * Send OTP to phone number via WhatsApp
    * @param {string} phoneNumber - Phone number
    * @returns {Object} Stytch response
    */
   async sendPhoneOTP(phoneNumber) {
     try {
-      const result = await stytchClient.otps.sms.send({
+      console.log('📱 Sending WhatsApp OTP to:', phoneNumber);
+      
+      // Try WhatsApp first (better international coverage)
+      const result = await stytchClient.otps.whatsapp.send({
         phone_number: phoneNumber,
         expiration_minutes: Math.floor(this.OTP_EXPIRY / 60)
       });
       
       if (result.status_code !== 200) {
-        throw new Error('Failed to send phone OTP');
+        throw new Error('Failed to send WhatsApp OTP');
       }
       
+      console.log('✅ WhatsApp OTP sent successfully');
       return result;
     } catch (error) {
-      throw new Error(`Phone OTP error: ${error.message}`);
+      console.error('❌ WhatsApp OTP failed:', error.message);
+      
+      // Fallback to SMS if WhatsApp fails
+      try {
+        console.log('🔄 Falling back to SMS...');
+        const smsResult = await stytchClient.otps.sms.send({
+          phone_number: phoneNumber,
+          expiration_minutes: Math.floor(this.OTP_EXPIRY / 60)
+        });
+        
+        if (smsResult.status_code !== 200) {
+          throw new Error('Failed to send SMS OTP');
+        }
+        
+        console.log('✅ SMS OTP sent as fallback');
+        return smsResult;
+      } catch (smsError) {
+        console.error('❌ SMS fallback also failed:', smsError.message);
+        throw new Error(`Failed to send OTP via WhatsApp or SMS: ${error.message}`);
+      }
     }
   }
 
@@ -576,18 +599,42 @@ class AuthService {
         throw new Error('Maximum phone OTP attempts exceeded');
       }
       
-      // Verify phone OTP with Stytch
+      // Verify phone OTP with Stytch (try WhatsApp first, then SMS)
       try {
-        const phoneResult = await stytchClient.otps.sms.authenticate({
-          method_id: session.stytchPhoneId,
-          code: otp
-        });
+        let phoneResult;
+        
+        // Try WhatsApp verification first
+        try {
+          console.log('🔐 Trying WhatsApp verification...');
+          phoneResult = await stytchClient.otps.whatsapp.authenticate({
+            method_id: session.stytchPhoneId,
+            code: otp
+          });
+          
+          if (phoneResult.status_code === 200) {
+            console.log('✅ WhatsApp OTP verified successfully');
+          } else {
+            throw new Error('WhatsApp verification failed');
+          }
+        } catch (whatsappError) {
+          console.log('🔄 WhatsApp verification failed, trying SMS...');
+          
+          // Fallback to SMS verification
+          phoneResult = await stytchClient.otps.sms.authenticate({
+            method_id: session.stytchPhoneId,
+            code: otp
+          });
+          
+          if (phoneResult.status_code === 200) {
+            console.log('✅ SMS OTP verified successfully');
+          } else {
+            throw new Error('SMS verification failed');
+          }
+        }
         
         if (phoneResult.status_code !== 200) {
           throw new Error('Invalid OTP');
         }
-        
-        console.log('✅ Phone OTP verified successfully');
         
         // Update session
         session.phoneVerified = true;
