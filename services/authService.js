@@ -36,7 +36,7 @@ class AuthService {
           query: {
             operator: 'AND',
             operands: [{
-              filter_name: 'phone_number',
+              filter_name: 'phone',
               filter_value: [value]
             }]
           }
