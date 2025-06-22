@@ -404,7 +404,7 @@ class AuthService {
   /**
    * Send OTP to phone number via WhatsApp
    * @param {string} phoneNumber - Phone number
-   * @returns {Object} Stytch response
+   * @returns {Object} Stytch response with method type
    */
   async sendPhoneOTP(phoneNumber) {
     try {
@@ -421,7 +421,7 @@ class AuthService {
       }
       
       console.log('✅ WhatsApp OTP sent successfully');
-      return result;
+      return { ...result, method_type: 'whatsapp' };
     } catch (error) {
       console.error('❌ WhatsApp OTP failed:', error.message);
       
@@ -438,7 +438,7 @@ class AuthService {
         }
         
         console.log('✅ SMS OTP sent as fallback');
-        return smsResult;
+        return { ...smsResult, method_type: 'sms' };
       } catch (smsError) {
         console.error('❌ SMS fallback also failed:', smsError.message);
         throw new Error(`Failed to send OTP via WhatsApp or SMS: ${error.message}`);
@@ -539,6 +539,7 @@ class AuthService {
         createdAt: Date.now(),
         expiresAt: expiresAt.getTime(),
         stytchPhoneId: phoneResult.request_id,
+        phoneMethodType: phoneResult.method_type, // Store method type (whatsapp/sms)
         stytchEmailId: null
       });
       
@@ -599,13 +600,14 @@ class AuthService {
         throw new Error('Maximum phone OTP attempts exceeded');
       }
       
-      // Verify phone OTP with Stytch (try WhatsApp first, then SMS)
+      // Verify phone OTP with Stytch using the correct method type
       try {
         let phoneResult;
         
-        // Try WhatsApp verification first
-        try {
-          console.log('🔐 Trying WhatsApp verification...');
+        console.log(`🔐 Verifying OTP using ${session.phoneMethodType} method...`);
+        
+        if (session.phoneMethodType === 'whatsapp') {
+          // Use WhatsApp verification
           phoneResult = await stytchClient.otps.whatsapp.authenticate({
             method_id: session.stytchPhoneId,
             code: otp
@@ -614,12 +616,10 @@ class AuthService {
           if (phoneResult.status_code === 200) {
             console.log('✅ WhatsApp OTP verified successfully');
           } else {
-            throw new Error('WhatsApp verification failed');
+            throw new Error('Invalid WhatsApp OTP');
           }
-        } catch (whatsappError) {
-          console.log('🔄 WhatsApp verification failed, trying SMS...');
-          
-          // Fallback to SMS verification
+        } else if (session.phoneMethodType === 'sms') {
+          // Use SMS verification
           phoneResult = await stytchClient.otps.sms.authenticate({
             method_id: session.stytchPhoneId,
             code: otp
@@ -628,8 +628,10 @@ class AuthService {
           if (phoneResult.status_code === 200) {
             console.log('✅ SMS OTP verified successfully');
           } else {
-            throw new Error('SMS verification failed');
+            throw new Error('Invalid SMS OTP');
           }
+        } else {
+          throw new Error('Unknown phone method type');
         }
         
         if (phoneResult.status_code !== 200) {
@@ -933,7 +935,9 @@ class AuthService {
         createdAt: Date.now(),
         expiresAt: expiresAt.getTime(),
         stytchCurrentPhoneId: currentPhoneOTPResult.request_id,
-        stytchNewPhoneId: null
+        currentPhoneMethodType: currentPhoneOTPResult.method_type,
+        stytchNewPhoneId: null,
+        newPhoneMethodType: null
       });
       
       // Update rate limiting
@@ -998,13 +1002,14 @@ class AuthService {
         throw new Error('Maximum current phone OTP attempts exceeded');
       }
       
-      // Verify current phone OTP with Stytch (try WhatsApp first, then SMS)
+      // Verify current phone OTP with Stytch using the correct method type
       try {
         let currentPhoneResult;
         
-        // Try WhatsApp verification first
-        try {
-          console.log('🔐 Trying WhatsApp verification for current phone...');
+        console.log(`🔐 Verifying current phone OTP using ${session.currentPhoneMethodType} method...`);
+        
+        if (session.currentPhoneMethodType === 'whatsapp') {
+          // Use WhatsApp verification
           currentPhoneResult = await stytchClient.otps.whatsapp.authenticate({
             method_id: session.stytchCurrentPhoneId,
             code: otp
@@ -1013,12 +1018,10 @@ class AuthService {
           if (currentPhoneResult.status_code === 200) {
             console.log('✅ Current phone WhatsApp OTP verified successfully');
           } else {
-            throw new Error('WhatsApp verification failed');
+            throw new Error('Invalid current phone WhatsApp OTP');
           }
-        } catch (whatsappError) {
-          console.log('🔄 WhatsApp verification failed, trying SMS for current phone...');
-          
-          // Fallback to SMS verification
+        } else if (session.currentPhoneMethodType === 'sms') {
+          // Use SMS verification
           currentPhoneResult = await stytchClient.otps.sms.authenticate({
             method_id: session.stytchCurrentPhoneId,
             code: otp
@@ -1027,8 +1030,10 @@ class AuthService {
           if (currentPhoneResult.status_code === 200) {
             console.log('✅ Current phone SMS OTP verified successfully');
           } else {
-            throw new Error('SMS verification failed');
+            throw new Error('Invalid current phone SMS OTP');
           }
+        } else {
+          throw new Error('Unknown current phone method type');
         }
         
         if (currentPhoneResult.status_code !== 200) {
@@ -1044,6 +1049,7 @@ class AuthService {
         session.step = 'verify_new_phone';
         session.currentPhoneAttempts = 0; // Reset attempts after success
         session.stytchNewPhoneId = newPhoneOTPResult.request_id;
+        session.newPhoneMethodType = newPhoneOTPResult.method_type;
         this.phoneChangeSessions.set(sessionId, session);
         
         return {
@@ -1115,13 +1121,14 @@ class AuthService {
         throw new Error('Maximum new phone OTP attempts exceeded');
       }
       
-      // Verify new phone OTP with Stytch (try WhatsApp first, then SMS)
+      // Verify new phone OTP with Stytch using the correct method type
       try {
         let newPhoneResult;
         
-        // Try WhatsApp verification first
-        try {
-          console.log('🔐 Trying WhatsApp verification for new phone...');
+        console.log(`🔐 Verifying new phone OTP using ${session.newPhoneMethodType} method...`);
+        
+        if (session.newPhoneMethodType === 'whatsapp') {
+          // Use WhatsApp verification
           newPhoneResult = await stytchClient.otps.whatsapp.authenticate({
             method_id: session.stytchNewPhoneId,
             code: otp
@@ -1130,12 +1137,10 @@ class AuthService {
           if (newPhoneResult.status_code === 200) {
             console.log('✅ New phone WhatsApp OTP verified successfully');
           } else {
-            throw new Error('WhatsApp verification failed');
+            throw new Error('Invalid new phone WhatsApp OTP');
           }
-        } catch (whatsappError) {
-          console.log('🔄 WhatsApp verification failed, trying SMS for new phone...');
-          
-          // Fallback to SMS verification
+        } else if (session.newPhoneMethodType === 'sms') {
+          // Use SMS verification
           newPhoneResult = await stytchClient.otps.sms.authenticate({
             method_id: session.stytchNewPhoneId,
             code: otp
@@ -1144,8 +1149,10 @@ class AuthService {
           if (newPhoneResult.status_code === 200) {
             console.log('✅ New phone SMS OTP verified successfully');
           } else {
-            throw new Error('SMS verification failed');
+            throw new Error('Invalid new phone SMS OTP');
           }
+        } else {
+          throw new Error('Unknown new phone method type');
         }
         
         if (newPhoneResult.status_code !== 200) {
