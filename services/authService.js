@@ -421,7 +421,12 @@ class AuthService {
       }
       
       console.log('✅ WhatsApp OTP sent successfully');
-      return { ...result, method_type: 'whatsapp' };
+      // WhatsApp returns phone_id, we need to map it to method_id for consistency
+      return { 
+        ...result, 
+        method_type: 'whatsapp',
+        method_id: result.phone_id // Map phone_id to method_id for authenticate
+      };
     } catch (error) {
       console.error('❌ WhatsApp OTP failed:', error.message);
       
@@ -438,7 +443,12 @@ class AuthService {
         }
         
         console.log('✅ SMS OTP sent as fallback');
-        return { ...smsResult, method_type: 'sms' };
+        // SMS returns phone_id, we need to map it to method_id for consistency
+        return { 
+          ...smsResult, 
+          method_type: 'sms',
+          method_id: smsResult.phone_id // Map phone_id to method_id for authenticate
+        };
       } catch (smsError) {
         console.error('❌ SMS fallback also failed:', smsError.message);
         throw new Error(`Failed to send OTP via WhatsApp or SMS: ${error.message}`);
@@ -538,7 +548,7 @@ class AuthService {
         step: 'phone_verification', // Current step
         createdAt: Date.now(),
         expiresAt: expiresAt.getTime(),
-        stytchPhoneId: phoneResult.request_id,
+        stytchPhoneId: phoneResult.method_id, // Use method_id for authenticate
         phoneMethodType: phoneResult.method_type, // Store method type (whatsapp/sms)
         stytchEmailId: null
       });
@@ -912,7 +922,7 @@ class AuthService {
         newPhoneAttempts: 0,
         createdAt: Date.now(),
         expiresAt: expiresAt.getTime(),
-        stytchCurrentPhoneId: currentPhoneOTPResult.request_id,
+        stytchCurrentPhoneId: currentPhoneOTPResult.method_id, // Use method_id for authenticate
         currentPhoneMethodType: currentPhoneOTPResult.method_type,
         stytchNewPhoneId: null,
         newPhoneMethodType: null
@@ -1004,7 +1014,7 @@ class AuthService {
         session.currentPhoneVerified = true;
         session.step = 'verify_new_phone';
         session.currentPhoneAttempts = 0; // Reset attempts after success
-        session.stytchNewPhoneId = newPhoneOTPResult.request_id;
+        session.stytchNewPhoneId = newPhoneOTPResult.method_id; // Use method_id for authenticate
         session.newPhoneMethodType = newPhoneOTPResult.method_type;
         this.phoneChangeSessions.set(sessionId, session);
         
