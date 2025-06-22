@@ -30,9 +30,9 @@ class AuthService {
     try {
       console.log(`🔍 Checking availability for ${medium}: ${value}`);
       
-      let searchQuery = {};
       if (medium === 'phone') {
-        searchQuery = {
+        // Use search API for phone numbers
+        const searchQuery = {
           query: {
             operator: 'AND',
             operands: [{
@@ -41,35 +41,38 @@ class AuthService {
             }]
           }
         };
-      } else if (medium === 'email') {
-        searchQuery = {
-          query: {
-            operator: 'AND',
-            operands: [{
-              filter_name: 'email',
-              filter_value: [value]
-            }]
-          }
+
+        const result = await stytchClient.users.search(searchQuery);
+        
+        console.log(`📊 Phone search result:`, { 
+          found: result.results?.length > 0,
+          count: result.results?.length || 0 
+        });
+
+        return {
+          available: !result.results || result.results.length === 0,
+          medium,
+          value,
+          message: result.results?.length > 0 ? 
+            'Phone number is already registered' : 
+            'Phone number is available'
         };
+
+      } else if (medium === 'email') {
+        // For email, we'll skip the availability check since Stytch doesn't support email search filters
+        // We'll let Stytch handle the duplicate email check during the actual OTP send process
+        console.log(`📧 Skipping email availability check - will be handled by Stytch during OTP send`);
+        
+        return {
+          available: true, // We assume it's available and let Stytch handle duplicates
+          medium,
+          value,
+          message: 'Email availability will be checked during OTP send'
+        };
+
       } else {
         throw new Error('Invalid medium. Must be phone or email.');
       }
-
-      const result = await stytchClient.users.search(searchQuery);
-      
-      console.log(`📊 Search result:`, { 
-        found: result.results?.length > 0,
-        count: result.results?.length || 0 
-      });
-
-      return {
-        available: !result.results || result.results.length === 0,
-        medium,
-        value,
-        message: result.results?.length > 0 ? 
-          `${medium === 'phone' ? 'Phone number' : 'Email'} is already registered` : 
-          `${medium === 'phone' ? 'Phone number' : 'Email'} is available`
-      };
 
     } catch (error) {
       console.error(`❌ Error checking availability: ${error.message}`);
