@@ -2,19 +2,66 @@ import TransactionService, { TRANSACTION_TYPES, TRANSACTION_STATUS } from '../se
 import { createSuccessResponse, createErrorResponse } from '../utils/baseResponse.js';
 import { z } from "zod";
 
-// message error code add 
+// Transaction validation schema with proper type coercion
 const transactionSchema = z.object({
-  userId: z.string(),
-  type: z.string(),
-  amount: z.number(),
-  assetSymbol: z.string(),
+  userId: z.string().min(1, "User ID is required"),
+  type: z.string().refine((val) => {
+    // Import will be available at runtime
+    return val && typeof val === 'string' && val.trim().length > 0;
+  }, {
+    message: "Transaction type is required"
+  }).refine((val) => {
+    // This will be checked at runtime when TRANSACTION_TYPES is available
+    try {
+      return Object.values(TRANSACTION_TYPES).includes(val);
+    } catch {
+      return ['transfer', 'payment', 'cash_out', 'cash_in', 'exchange'].includes(val);
+    }
+  }, {
+    message: "Invalid transaction type. Must be one of: transfer, payment, cash_out, cash_in, exchange"
+  }),
+  amount: z.union([
+    z.number(),
+    z.string().transform((val, ctx) => {
+      const parsed = parseFloat(val);
+      if (isNaN(parsed)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Amount must be a valid number",
+        });
+        return z.NEVER;
+      }
+      return parsed;
+    })
+  ]).refine((val) => val > 0, {
+    message: "Amount must be a positive number"
+  }),
+  assetSymbol: z.string().min(1, "Asset symbol is required").transform(val => val.toUpperCase()),
   assetName: z.string().optional(),
-  network: z.string(),
+  network: z.string().min(1, "Network is required").transform(val => val.toLowerCase()),
   fromAddress: z.string().optional(),
   toAddress: z.string().optional(),
   description: z.string().optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.any()).optional().default({}),
 });
+
+// Transaction status update schema
+const statusUpdateSchema = z.object({
+  status: z.string().refine((val) => {
+    try {
+      return Object.values(TRANSACTION_STATUS).includes(val);
+    } catch {
+      return ['pending', 'processing', 'completed', 'failed', 'cancelled'].includes(val);
+    }
+  }, {
+    message: "Invalid status. Must be one of: pending, processing, completed, failed, cancelled"
+  }),
+  txHash: z.string().optional(),
+  blockNumber: z.coerce.number().optional(),
+  gasUsed: z.coerce.number().optional(),
+  errorCode: z.string().optional(),
+  errorReason: z.string().optional(),
+}).passthrough(); // Allow additional fields
 
 class TransactionController {
   /**
@@ -294,6 +341,7 @@ class TransactionController {
         metadata = {}
       } = req.body;
 
+      // Prepare data for validation
       const transactionData = {
         userId,
         type,
@@ -307,11 +355,11 @@ class TransactionController {
         metadata
       };
 
-      // Zod validation add // error code 
+      // Zod validation with proper error handling
       const parseResult = transactionSchema.safeParse(transactionData);
       
       if (!parseResult.success) {
-        const errors = parseResult.error.errors.map(e => e.message).join(', ');
+        const errors = parseResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
         return res.status(400).json(createErrorResponse(
           `Validation failed: ${errors}`,
           'VALIDATION_ERROR',
@@ -319,8 +367,11 @@ class TransactionController {
         ));
       }
 
+      // Use validated data
+      const validatedData = parseResult.data;
+
       // Create transaction
-      const transaction = await TransactionService.createTransaction(transactionData);
+      const transaction = await TransactionService.createTransaction(validatedData);
 
       console.log(`✅ User ${userId} created transaction ${transaction.id} (${type} ${amount} ${assetSymbol})`);
 
@@ -356,24 +407,28 @@ class TransactionController {
       }
 
       const { id: transactionId } = req.params;
-      const { status, ...updateData } = req.body;
 
-      if (!transactionId || !status) {
+      if (!transactionId) {
         return res.status(400).json(createErrorResponse(
-          'Transaction ID and status are required',
+          'Transaction ID is required',
           'INVALID_PARAMETER',
           400
         ));
       }
 
-      // Validate status
-      if (!Object.values(TRANSACTION_STATUS).includes(status)) {
+      // Validate request body with Zod
+      const parseResult = statusUpdateSchema.safeParse(req.body);
+      
+      if (!parseResult.success) {
+        const errors = parseResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
         return res.status(400).json(createErrorResponse(
-          `Invalid status. Must be one of: ${Object.values(TRANSACTION_STATUS).join(', ')}`,
-          'INVALID_TRANSACTION_STATUS',
+          `Validation failed: ${errors}`,
+          'VALIDATION_ERROR',
           400
         ));
       }
+
+      const { status, ...updateData } = parseResult.data;
 
       // Update transaction
       const transaction = await TransactionService.updateTransactionStatus(
@@ -393,7 +448,8 @@ class TransactionController {
     } catch (error) {
       console.error('Error in updateTransactionStatus controller:', error);
 
-      if (error.message === 'Transaction not found or access denied') {
+      if (error.message === 'Transaction not found or access denied' || 
+          error.message.includes('JSON object requested, multiple (or no) rows returned')) {
         return res.status(404).json(createErrorResponse(
           'Transaction not found',
           'TRANSACTION_NOT_FOUND',

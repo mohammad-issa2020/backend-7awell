@@ -60,7 +60,7 @@ describe('Promotions API', () => {
 
     it('should get promotions with custom locale', async () => {
       const mockPromotions = [
-        createMockPromotion({ title: 'عرض خاص' })
+        createMockPromotion({ title: 'offer 1' })
       ];
 
       vi.doMock('../services/promotionService', () => ({
@@ -81,7 +81,7 @@ describe('Promotions API', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.data.locale).toBe('ar');
-      expect(response.body.data.promotions[0].title).toBe('عرض خاص');
+      expect(response.body.data.promotions[0].title).toBe('offer 1');
     });
 
     it('should handle pagination parameters', async () => {

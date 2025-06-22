@@ -134,26 +134,5 @@ COMMENT ON COLUMN transaction_details.gas_fee IS 'Gas fee paid for the transacti
 COMMENT ON COLUMN transaction_details.error_message IS 'Error message if transaction failed';
 COMMENT ON COLUMN transaction_details.raw_response IS 'Raw response from blockchain node';
 
-CREATE OR REPLACE FUNCTION prevent_update_except_status()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF NEW.status IS DISTINCT FROM OLD.status THEN
-    -- Only status is allowed to change
-    -- Check if any other column is changed
-    IF row_to_json(NEW) - 'status' IS DISTINCT FROM row_to_json(OLD) - 'status' THEN
-      RAISE EXCEPTION 'Only status can be updated';
-    END IF;
-  ELSE
-    -- If status is not changed, prevent any update
-    IF row_to_json(NEW) IS DISTINCT FROM row_to_json(OLD) THEN
-      RAISE EXCEPTION 'Only status can be updated';
-    END IF;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
 
-CREATE TRIGGER only_status_update
-BEFORE UPDATE ON transaction_details
-FOR EACH ROW
-EXECUTE FUNCTION prevent_update_except_status(); 
+

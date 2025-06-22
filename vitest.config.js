@@ -22,7 +22,8 @@ export default defineConfig({
         '*.config.js'
       ]
     },
-    setupFiles: ['./tests/setup.js'],
+    // Setup files for different test types
+    setupFiles: ['./tests/setup/setup.js'], // Backward compatibility
     testMatch: [
       './tests/**/*.test.js',
       './tests/**/*.integration.test.js'
@@ -35,6 +36,17 @@ export default defineConfig({
         minThreads: 1,
         maxThreads: 4
       }
-    }
+    },
+    // Enhanced setup system configuration
+    env: {
+      NODE_ENV: 'test',
+      VITEST_ENHANCED_SETUP: 'true'
+    },
+    // Exclude demo and example files from regular test runs
+    exclude: [
+      'node_modules/**',
+      'tests/setup/demo.test.js',
+      'tests/setup/examples.js'
+    ]
   }
 }); 

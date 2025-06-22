@@ -9,7 +9,7 @@ class ContactController {
    */
   async syncContacts(req, res) {
     try {
-      const { phoneNumbers, deviceContactsCount } = req.body;
+      const { phoneNumbers, deviceContactsCount, batchSize } = req.body;
       const userId = req.user.id;
 
       if (!Array.isArray(phoneNumbers)) {
@@ -43,9 +43,20 @@ class ContactController {
         );
       }
 
-      const result = await ContactsWithAccounts.syncContacts(userId, phoneNumbers, deviceContactsCount);
+      // Estimate performance before sync
+      const performanceEstimate = await ContactsWithAccounts.estimateSyncPerformance(
+        phoneNumbers.length,
+        batchSize
+      );
 
-      // Log the sync activity
+      const result = await ContactsWithAccounts.syncContacts(
+        userId, 
+        phoneNumbers, 
+        deviceContactsCount,
+        { batchSize }
+      );
+
+      // Log the sync activity with performance metrics
       await logUserActivity(
         userId,
         'Contact sync completed',
@@ -53,13 +64,23 @@ class ContactController {
         {
           device_contacts: deviceContactsCount,
           matched_contacts: result.matched_contacts,
-          total_processed: result.total_processed
+          total_processed: result.total_processed,
+          contacts_inserted: result.contacts_inserted,
+          contacts_updated: result.contacts_updated,
+          processing_time_ms: result.processing_time_ms,
+          batch_size: result.batch_size,
+          estimated_time_seconds: performanceEstimate?.estimated_time_seconds,
+          actual_vs_estimated: performanceEstimate?.estimated_time_seconds ? 
+            (result.processing_time_ms / 1000) / performanceEstimate.estimated_time_seconds : null
         }
       );
 
       return BaseResponse.success(
         res,
-        result,
+        {
+          ...result,
+          performance_estimate: performanceEstimate
+        },
         'Contacts synced successfully'
       );
     } catch (error) {
@@ -70,6 +91,165 @@ class ContactController {
         500,
         error.message,
         'CONTACT_SYNC_FAILED'
+      );
+    }
+  }
+
+  /**
+   * Estimate contact sync performance
+   * POST /contacts/sync/estimate
+   */
+  async estimateSyncPerformance(req, res) {
+    try {
+      const { contactCount, batchSize } = req.body;
+
+      if (!contactCount || contactCount <= 0) {
+        return BaseResponse.error(
+          res,
+          'Invalid request',
+          400,
+          'contactCount must be a positive number',
+          'INVALID_CONTACT_COUNT'
+        );
+      }
+
+      if (contactCount > 10000) {
+        return BaseResponse.error(
+          res,
+          'Too many contacts',
+          400,
+          'Maximum 10,000 contacts allowed for estimation',
+          'CONTACTS_LIMIT_EXCEEDED'
+        );
+      }
+
+      const estimate = await ContactsWithAccounts.estimateSyncPerformance(contactCount, batchSize);
+
+      return BaseResponse.success(
+        res,
+        estimate,
+        'Performance estimate calculated successfully'
+      );
+    } catch (error) {
+      console.error('Estimate sync performance error:', error);
+      return BaseResponse.error(
+        res,
+        'Failed to estimate sync performance',
+        500,
+        error.message,
+        'ESTIMATE_PERFORMANCE_FAILED'
+      );
+    }
+  }
+
+  /**
+   * Get contact sync statistics
+   * GET /contacts/sync/statistics
+   */
+  async getSyncStatistics(req, res) {
+    try {
+      const { days = 30 } = req.query;
+      const userId = req.user.id;
+
+      if (days < 1 || days > 365) {
+        return BaseResponse.error(
+          res,
+          'Invalid request',
+          400,
+          'days must be between 1 and 365',
+          'INVALID_DAYS_RANGE'
+        );
+      }
+
+      const statistics = await ContactsWithAccounts.getSyncStatistics(parseInt(days));
+
+      return BaseResponse.success(
+        res,
+        {
+          statistics,
+          period_days: parseInt(days),
+          user_id: userId
+        },
+        'Sync statistics retrieved successfully'
+      );
+    } catch (error) {
+      console.error('Get sync statistics error:', error);
+      return BaseResponse.error(
+        res,
+        'Failed to get sync statistics',
+        500,
+        error.message,
+        'GET_SYNC_STATISTICS_FAILED'
+      );
+    }
+  }
+
+  /**
+   * Bulk insert contacts (for admin/testing purposes)
+   * POST /contacts/bulk-insert
+   */
+  async bulkInsertContacts(req, res) {
+    try {
+      const { contacts, batchSize } = req.body;
+      const userId = req.user.id;
+
+      if (!Array.isArray(contacts)) {
+        return BaseResponse.error(
+          res,
+          'Invalid request',
+          400,
+          'contacts must be an array',
+          'INVALID_CONTACTS'
+        );
+      }
+
+      if (contacts.length > 10000) {
+        return BaseResponse.error(
+          res,
+          'Too many contacts',
+          400,
+          'Maximum 10,000 contacts allowed per bulk insert',
+          'CONTACTS_LIMIT_EXCEEDED'
+        );
+      }
+
+      // Validate contact structure
+      const validatedContacts = contacts.map(contact => ({
+        owner_id: contact.owner_id || userId,
+        phone_hash: contact.phone_hash,
+        is_favorite: contact.is_favorite || false,
+        linked_user_id: contact.linked_user_id || null
+      }));
+
+      const result = await ContactsWithAccounts.bulkInsertContacts(validatedContacts, { batchSize });
+
+      // Log the bulk insert activity
+      await logUserActivity(
+        userId,
+        'Bulk contact insert completed',
+        'contact',
+        {
+          total_processed: result.total_processed,
+          contacts_inserted: result.contacts_inserted,
+          contacts_updated: result.contacts_updated,
+          processing_time_ms: result.processing_time_ms,
+          batch_size: result.batch_size
+        }
+      );
+
+      return BaseResponse.success(
+        res,
+        result,
+        'Contacts bulk inserted successfully'
+      );
+    } catch (error) {
+      console.error('Bulk insert contacts error:', error);
+      return BaseResponse.error(
+        res,
+        'Failed to bulk insert contacts',
+        500,
+        error.message,
+        'BULK_INSERT_FAILED'
       );
     }
   }

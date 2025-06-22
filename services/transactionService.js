@@ -1,35 +1,21 @@
 import { supabase } from '../database/supabase.js';
-import ActivityLogger from './activityLogger.js';
 
-// Transaction types mapping
+// Transaction types mapping - matching database enum
 const TRANSACTION_TYPES = {
-  SEND: 'send',
-  RECEIVE: 'receive',
-  BUY: 'buy',
-  SELL: 'sell',
-  SWAP: 'swap',
-  STAKE: 'stake',
-  UNSTAKE: 'unstake',
-  REWARD: 'reward',
-  FEE: 'fee',
-  DEPOSIT: 'deposit',
-  WITHDRAWAL: 'withdrawal',
   TRANSFER: 'transfer',
-  PAYMENT: 'payment',
+  PAYMENT: 'payment', 
   CASH_OUT: 'cash_out',
   CASH_IN: 'cash_in',
   EXCHANGE: 'exchange'
 };
 
-// Transaction status mapping
+// Transaction status mapping - matching database enum
 const TRANSACTION_STATUS = {
   PENDING: 'pending',
   PROCESSING: 'processing',
-  CONFIRMED: 'confirmed',
   COMPLETED: 'completed',
   FAILED: 'failed',
-  CANCELLED: 'cancelled',
-  EXPIRED: 'expired'
+  CANCELLED: 'cancelled'
 };
 
 // Asset types
@@ -101,22 +87,33 @@ class TransactionService {
         offset = parseInt(cursor, 10) || 0;
       }
 
-      console.log('📊 Calling get_user_transactions with:', {
-        p_user_id: userId,
-        p_status: status,
-        p_type: type,
-        p_limit: limitNum,
-        p_offset: offset
+      console.log('📊 Querying transactions directly with:', {
+        userId,
+        status,
+        type,
+        limit: limitNum,
+        offset
       });
 
-      // Use the database function with the correct parameters
-      const { data, error } = await supabase.rpc('get_user_transactions', {
-        p_user_id: userId,
-        p_status: status,
-        p_type: type,
-        p_limit: limitNum,
-        p_offset: offset
-      });
+      // Query transactions table directly since the function doesn't exist
+      let query = supabase
+        .from('transactions')
+        .select('*')
+        .eq('sender_id', userId)
+        .order('created_at', { ascending: false });
+
+      // Apply filters
+      if (status) {
+        query = query.eq('status', status);
+      }
+      if (type) {
+        query = query.eq('type', type);
+      }
+
+      // Apply pagination
+      query = query.range(offset, offset + limitNum - 1);
+
+      const { data, error } = await query;
 
       if (error) {
         console.error('Database error in getTransactions:', error);
@@ -455,10 +452,20 @@ class TransactionService {
         throw new Error(`Invalid transaction status: ${status}`);
       }
 
+      // Get current metadata to preserve existing data
+      const { data: currentTx } = await supabase
+        .from('transactions')
+        .select('metadata')
+        .eq('id', transactionId)
+        .eq('sender_id', userId)
+        .single();
+
+      const currentMetadata = currentTx?.metadata || {};
+      
+      // Prepare updates - only use columns that exist in the database
       const updates = {
         status,
-        updated_at: new Date().toISOString(),
-        ...updateData
+        updated_at: new Date().toISOString()
       };
 
       // Add status-specific fields using existing columns only
@@ -466,31 +473,19 @@ class TransactionService {
         updates.completed_at = new Date().toISOString();
       }
 
-      // Store additional status info in metadata if needed
-      if (updateData.confirmations || updateData.transaction_hash || updateData.error_message) {
-        // Get current metadata to preserve existing data
-        const { data: currentTx } = await supabase
-          .from('transactions')
-          .select('metadata')
-          .eq('id', transactionId)
-          .eq('sender_id', userId)
-          .single();
+      // Store all additional data in metadata (including txHash, blockNumber, errorCode, etc.)
+      const statusUpdateData = {
+        timestamp: new Date().toISOString(),
+        ...updateData // This includes txHash, blockNumber, errorCode, errorReason, etc.
+      };
 
-        const currentMetadata = currentTx?.metadata || {};
-        
-        updates.metadata = {
-          ...currentMetadata,
-          status_updates: {
-            ...currentMetadata.status_updates,
-            [status]: {
-              timestamp: new Date().toISOString(),
-              confirmations: updateData.confirmations,
-              transaction_hash: updateData.transaction_hash,
-              error_message: updateData.error_message
-            }
-          }
-        };
-      }
+      updates.metadata = {
+        ...currentMetadata,
+        status_updates: {
+          ...currentMetadata.status_updates,
+          [status]: statusUpdateData
+        }
+      };
 
       const { data, error } = await supabase
         .from('transactions')
@@ -527,9 +522,9 @@ class TransactionService {
 
   static getTransactionOptions() {
     return {
-      types: TRANSACTION_TYPES,
-      statuses: TRANSACTION_STATUS,
-      assetTypes: ASSET_TYPES,
+      types: Object.values(TRANSACTION_TYPES),
+      statuses: Object.values(TRANSACTION_STATUS),
+      assetTypes: Object.values(ASSET_TYPES),
       supportedNetworks: [
         'ethereum',
         'bitcoin',
@@ -569,16 +564,22 @@ class TransactionService {
 
   static async logTransactionActivity(userId, action, details) {
     try {
-      await ActivityLogger.logActivity({
-        userId,
-        action,
-        activityType: 'transaction_sent', // or appropriate type
-        details,
-        success: true,
-        riskLevel: 'medium'
-      });
+      // Log to activity_logs table directly with correct column names only
+      const { data, error } = await supabase
+        .from('activity_logs')
+        .insert([{
+          user_id: userId,
+          action: action,
+          details: details,
+          ip_address: null,
+          device_id: null
+        }]);
+
+      if (error) {
+        console.warn('Failed to log transaction activity:', error);
+      }
     } catch (error) {
-      console.error('Failed to log transaction activity:', error);
+      console.warn('Error logging transaction activity:', error);
       // Don't throw - this is supplementary logging
     }
   }
@@ -623,8 +624,8 @@ class TransactionService {
       errors.push('Network must be 1-50 characters');
     }
 
-    // Validate addresses for send transactions - but make it optional for testing
-    if (type === TRANSACTION_TYPES.SEND) {
+    // Validate addresses for transfer transactions - but make it optional for testing
+    if (type === TRANSACTION_TYPES.TRANSFER) {
       if (fromAddress && typeof fromAddress !== 'string') {
         errors.push('From address must be a string');
       }

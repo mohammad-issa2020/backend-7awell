@@ -1,5 +1,4 @@
 import authService from '../services/authService.js';
-// import web3AuthService from '../services/web3AuthService.js';
 import BaseResponse from '../utils/baseResponse.js';
 
 class AuthController {
@@ -31,123 +30,16 @@ class AuthController {
 
 
 
-  async handleWalletCreation(user) {
-    try {
-      const Wallet = require('../models/Wallet');
-      const { logUserActivity } = require('../services/activityService');
-      
-      // Only check if user has an existing wallet - don't create new ones
-      const existingWallet = await Wallet.getPrimaryWallet(user.id);
-      
-      if (existingWallet) {
-        // Wallet exists - retrieve data and create JWT
-        console.log('✅ Existing wallet found for user:', user.id);
-        
-        // Update last used
-        await Wallet.updateLastUsed(existingWallet.id);
-        
-        // Determine login method based on user data
-        const loginMethod = user.email ? 'email' : 'phone';
-        
-        // Create JWT for Web3Auth
-        // const web3AuthToken = web3AuthService.createCustomJWT(user, loginMethod);
-        
-        // Log activity
-        await logUserActivity(
-          user.id,
-          'Wallet accessed during login',
-          'auth_login',
-          { wallet_address: existingWallet.address, login_method: loginMethod }
-        );
-        
-        return {
-          success: true,
-          isNewWallet: false,
-          wallet: {
-            id: existingWallet.id,
-            address: existingWallet.address,
-            network: existingWallet.network,
-            provider: existingWallet.provider,
-            status: existingWallet.status,
-            createdAt: existingWallet.created_at,
-            lastUsed: existingWallet.last_used,
-            isPrimary: true
-          },
-          web3auth: {
-            token: web3AuthToken,
-            // verifier: web3AuthService.verifiers[loginMethod],
-            // clientId: web3AuthService.web3AuthClientId,
-            expiresIn: 24 * 60 * 60, // 24 hours
-            loginMethod: loginMethod
-          }
-        };
-      } else {
-        // No wallet found - return Web3Auth config for frontend wallet creation
-        console.log('ℹ️ No wallet found for user:', user.id, '- Frontend should handle wallet creation');
-        
-        // Determine login method based on user data
-        const loginMethod = user.email ? 'email' : 'phone';
-        
-        // Create integration data for frontend
-        // const integrationData = web3AuthService.createWalletIntegration(user, loginMethod);
-        
-        return {
-          success: true,
-          isNewWallet: false,
-          hasWallet: false,
-          message: 'No wallet found. Use Web3Auth in frontend to create wallet.',
-          ...integrationData
-        };
-      }
-    } catch (error) {
-      console.error('❌ Error in wallet retrieval:', error);
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
+
 
   /**
    * Create placeholder address for wallet
    * @param {string} userId - user id
    * @returns {string} placeholder address
    */
-  generatePlaceholderAddress(userId) {
-    // إنشاء عنوان deterministic بناءً على userId
-    const crypto = require('crypto');
-    const hash = crypto.createHash('sha256').update(`7awel_${userId}_${Date.now()}`).digest('hex');
-    return `0x${hash.substring(0, 40)}`;
-  }
 
-  /**
-   * Login user (create or get existing user and session)
-   * POST /auth/login
-   * Note: In Stytch flow, sessions are already created during OTP verification
-   */
-  async login(req, res) {
-    try {
-      const { phoneNumber, email } = req.body;
-      
-      // In the Stytch flow, actual login happens during OTP verification
-      // This endpoint is mainly for compatibility or user lookup
-      const result = await authService.login(phoneNumber, email);
-      
-      return BaseResponse.success(
-        res,
-        result,
-        'User information retrieved successfully. Note: Active session should be from OTP verification.'
-      );
-    } catch (error) {
-      return BaseResponse.error(
-        res,
-        'Login failed',
-        400,
-        error.message,
-        'LOGIN_FAILED'
-      );
-    }
-  }
+
+
 
   /**
    * Refresh/validate Stytch session
@@ -653,186 +545,207 @@ class AuthController {
     }
   }
 
+
+
+  // NEW: Sequential Authentication Flow Methods
+
   /**
-   * Create wallet for authenticated user
-   * POST /auth/create-wallet
-   * This endpoint saves wallet data after Web3Auth creates it in the frontend
+   * Step 1: Start phone login - Send OTP to phone
+   * POST /auth/login/phone
    */
-  async createWallet(req, res) {
+  async startPhoneLogin(req, res) {
     try {
-      // User must be authenticated
-      if (!req.user) {
-        return BaseResponse.unauthorized(
-          res,
-          'Authentication required to create wallet',
-          'AUTH_REQUIRED'
-        );
-      }
-
-      const { address, network = 'ethereum', provider = 'web3auth', publicKey, backupMethods = ['device'] } = req.body;
-
-      // Validate required fields
-      if (!address) {
-        return BaseResponse.error(
-          res,
-          'Wallet address is required',
-          400,
-          'address field is required when saving wallet data',
-          'MISSING_WALLET_ADDRESS'
-        );
-      }
-
-      // Check if user already has a wallet
-      const Wallet = require('../models/Wallet');
-      const existingWallet = await Wallet.getPrimaryWallet(req.user.id);
+      const { phoneNumber } = req.body;
       
-      if (existingWallet) {
-        return BaseResponse.error(
-          res,
-          'User already has a wallet',
-          400,
-          'A primary wallet already exists for this user',
-          'WALLET_ALREADY_EXISTS'
-        );
-      }
-
-      // Save wallet data (created by Web3Auth in frontend)
-      const newWallet = await Wallet.create({
-        userId: req.user.id,
-        address: address,
-        network: network,
-        provider: provider,
-        publicKey: publicKey,
-        backupMethods: backupMethods
-      });
-
-      // Log activity
-      const { logUserActivity } = require('../services/activityService');
-      await logUserActivity(
-        req.user.id,
-        'Wallet created and saved',
-        'wallet_created',
-        {
-          wallet_address: address,
-          network: network,
-          provider: provider
-        }
-      );
-
-      // Create Web3Auth token
-      // const web3AuthToken = web3AuthService.createCustomJWT(req.user, req.user);
-
+      console.log('📱 Starting phone login for:', phoneNumber);
+      
+      const result = await authService.startPhoneLogin(phoneNumber);
+      
       return BaseResponse.success(
         res,
-        {
-          wallet: {
-            id: newWallet.id,
-            address: newWallet.address,
-            network: newWallet.network,
-            provider: newWallet.provider,
-            status: newWallet.status,
-            createdAt: newWallet.created_at,
-            lastUsed: newWallet.last_used,
-            isPrimary: true
-          },
-          web3auth: {
-            token: web3AuthToken,
-            // verifier: web3AuthService.web3AuthVerifier,
-            // clientId: web3AuthService.web3AuthClientId,
-            expiresIn: 24 * 60 * 60
-          }
-        },
-        'Wallet saved successfully'
+        result,
+        'OTP sent to phone number successfully'
       );
     } catch (error) {
-      console.error('❌ Error saving wallet:', error);
       return BaseResponse.error(
         res,
-        'Failed to save wallet',
-        500,
+        'Failed to send phone OTP',
+        400,
         error.message,
-        'WALLET_SAVE_ERROR'
+        'PHONE_OTP_SEND_FAILED'
       );
     }
   }
 
   /**
-   * Get user's wallet information
-   * GET /auth/wallet
+   * Step 2: Verify phone OTP
+   * POST /auth/login/phone/verify
    */
-  async getWallet(req, res) {
+  async verifyPhoneOTP(req, res) {
     try {
-      // User must be authenticated
-      if (!req.user) {
-        return BaseResponse.unauthorized(
-          res,
-          'Authentication required to access wallet',
-          'AUTH_REQUIRED'
-        );
-      }
-
-      const Wallet = require('../models/Wallet');
-      const wallet = await Wallet.getPrimaryWallet(req.user.id);
+      const { sessionId, otp } = req.body;
       
-      if (!wallet) {
-        // Determine login method based on user data
-        const loginMethod = req.user.email ? 'email' : 'phone';
-        
-        // Create integration data for frontend wallet creation
-        // const integrationData = web3AuthService.createWalletIntegration(req.user, loginMethod);
-        
-        return BaseResponse.success(
-          res,
-          {
-            hasWallet: false,
-            message: 'No wallet found for this user',
-            ...integrationData
-          },
-          'Wallet status retrieved - ready for creation'
-        );
-      }
-
-      // Update last used
-      await Wallet.updateLastUsed(wallet.id);
-
-      // Determine login method based on user data
-      const loginMethod = req.user.email ? 'email' : 'phone';
-
-      // Create Web3Auth token if needed
-      // const web3AuthToken = web3AuthService.createCustomJWT(req.user, loginMethod);
-
+      console.log('🔐 Verifying phone OTP for session:', sessionId);
+      
+      const result = await authService.verifyPhoneOTP(sessionId, otp);
+      
       return BaseResponse.success(
         res,
-        {
-          hasWallet: true,
-          wallet: {
-            id: wallet.id,
-            address: wallet.address,
-            network: wallet.network,
-            provider: wallet.provider,
-            status: wallet.status,
-            createdAt: wallet.created_at,
-            lastUsed: wallet.last_used,
-            isPrimary: true
-          },
-          web3auth: {
-            token: web3AuthToken,
-            // verifier: web3AuthService.verifiers[loginMethod],
-            // clientId: web3AuthService.web3AuthClientId,
-            expiresIn: 24 * 60 * 60,
-            loginMethod: loginMethod
-          }
-        },
-        'Wallet information retrieved successfully'
+        result,
+        'Phone OTP verified successfully'
       );
     } catch (error) {
-      console.error('❌ Error retrieving wallet:', error);
       return BaseResponse.error(
         res,
-        'Failed to retrieve wallet information',
-        500,
+        'Phone OTP verification failed',
+        400,
         error.message,
-        'WALLET_RETRIEVAL_ERROR'
+        'PHONE_OTP_VERIFICATION_FAILED'
+      );
+    }
+  }
+
+  /**
+   * Step 3: Start email login - Send OTP to email
+   * POST /auth/login/email
+   */
+  async startEmailLogin(req, res) {
+    try {
+      const { sessionId, email } = req.body;
+      
+      console.log('📧 Starting email login for session:', sessionId);
+      
+      const result = await authService.startEmailLogin(sessionId, email);
+      
+      return BaseResponse.success(
+        res,
+        result,
+        'OTP sent to email successfully'
+      );
+    } catch (error) {
+      return BaseResponse.error(
+        res,
+        'Failed to send email OTP',
+        400,
+        error.message,
+        'EMAIL_OTP_SEND_FAILED'
+      );
+    }
+  }
+
+  /**
+   * Step 4: Verify email OTP and complete login
+   * POST /auth/login/email/verify
+   */
+  async verifyEmailOTPAndComplete(req, res) {
+    try {
+      const { sessionId, otp } = req.body;
+      
+      console.log('🎉 Completing login for session:', sessionId);
+      
+      const result = await authService.verifyEmailOTPAndComplete(sessionId, otp);
+      
+      return BaseResponse.success(
+        res,
+        result,
+        'Login completed successfully'
+      );
+    } catch (error) {
+      return BaseResponse.error(
+        res,
+        'Login completion failed',
+        400,
+        error.message,
+        'LOGIN_COMPLETION_FAILED'
+      );
+    }
+  }
+
+  // NEW: Phone Change Operations (Guarded Operations)
+
+  /**
+   * Step 1: Start phone change - Send OTP to current phone
+   * POST /auth/phone/change/start
+   */
+  async startPhoneChange(req, res) {
+    try {
+      const { newPhoneNumber } = req.body;
+      const userId = req.user.id;
+      
+      console.log('📱 Starting phone change for user:', userId, 'to:', newPhoneNumber);
+      
+      const result = await authService.startPhoneChange(userId, newPhoneNumber);
+      
+      return BaseResponse.success(
+        res,
+        result,
+        'Phone change initiated - OTP sent to current phone'
+      );
+    } catch (error) {
+      return BaseResponse.error(
+        res,
+        'Failed to start phone change',
+        400,
+        error.message,
+        'PHONE_CHANGE_START_FAILED'
+      );
+    }
+  }
+
+  /**
+   * Step 2: Verify current phone OTP - Send OTP to new phone
+   * POST /auth/phone/change/verify-old
+   */
+  async verifyOldPhoneOTP(req, res) {
+    try {
+      const { sessionId, otp } = req.body;
+      const userId = req.user.id;
+      
+      console.log('🔐 Verifying old phone OTP for user:', userId, 'session:', sessionId);
+      
+      const result = await authService.verifyOldPhoneOTP(userId, sessionId, otp);
+      
+      return BaseResponse.success(
+        res,
+        result,
+        'Current phone verified - OTP sent to new phone'
+      );
+    } catch (error) {
+      return BaseResponse.error(
+        res,
+        'Failed to verify current phone OTP',
+        400,
+        error.message,
+        'OLD_PHONE_OTP_VERIFICATION_FAILED'
+      );
+    }
+  }
+
+  /**
+   * Step 3: Verify new phone OTP and complete phone change
+   * POST /auth/phone/change/verify-new
+   */
+  async verifyNewPhoneOTPAndComplete(req, res) {
+    try {
+      const { sessionId, otp } = req.body;
+      const userId = req.user.id;
+      
+      console.log('🎊 Completing phone change for user:', userId, 'session:', sessionId);
+      
+      const result = await authService.verifyNewPhoneOTPAndComplete(userId, sessionId, otp);
+      
+      return BaseResponse.success(
+        res,
+        result,
+        'Phone number changed successfully'
+      );
+    } catch (error) {
+      return BaseResponse.error(
+        res,
+        'Failed to complete phone change',
+        400,
+        error.message,
+        'PHONE_CHANGE_COMPLETION_FAILED'
       );
     }
   }

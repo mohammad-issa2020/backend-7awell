@@ -39,7 +39,7 @@ class UserMappingService {
         // Update last login
         await supabaseAdmin
           .from('users')
-          .update({ last_login_at: new Date().toISOString() })
+          .update({ last_login: new Date().toISOString() })
           .eq('id', existingUser.id);
           
         return existingUser;
@@ -51,11 +51,11 @@ class UserMappingService {
         let query = supabaseAdmin.from('users').select('*');
         
         if (userEmail && userPhone) {
-          query = query.or(`email.eq.${userEmail},phone_number.eq.${userPhone}`);
+          query = query.or(`email.eq.${userEmail},phone.eq.${userPhone}`);
         } else if (userEmail) {
           query = query.eq('email', userEmail);
         } else if (userPhone) {
-          query = query.eq('phone_number', userPhone);
+          query = query.eq('phone', userPhone);
         }
         
         const { data } = await query.single();
@@ -70,7 +70,7 @@ class UserMappingService {
           .from('users')
           .update({ 
             stytch_user_id: id,
-            last_login_at: new Date().toISOString(),
+            last_login: new Date().toISOString(),
             email_verified: stytchUser.emails?.[0]?.verified || true, // Assume verified if from custom auth
             phone_verified: stytchUser.phone_numbers?.[0]?.verified || true
           })
@@ -96,15 +96,15 @@ class UserMappingService {
         phone_number: userPhone 
       });
       
-      // Create new user - using phone_number field name to match database schema
+      // Create new user - using phone field name to match database schema
       const newUser = {
         stytch_user_id: id,
         email: userEmail,
-        phone_number: userPhone, // Fixed: use phone_number instead of phone
+        phone: userPhone, // Fixed: use phone instead of phone_number
         email_verified: stytchUser.emails?.[0]?.verified || true,
         phone_verified: stytchUser.phone_numbers?.[0]?.verified || true,
         status: 'active',
-        last_login_at: new Date().toISOString(),
+        last_login: new Date().toISOString(),
         created_at: created_at || new Date().toISOString()
       };
       
@@ -201,19 +201,83 @@ class UserMappingService {
   }
   
   /**
-   * Update user's last login time
+   * Update user's last login timestamp
    * @param {string} stytchUserId - Stytch user ID
+   * @returns {boolean} Success status
    */
   static async updateLastLogin(stytchUserId) {
     try {
-      await supabaseAdmin
+      const { error } = await supabaseAdmin
         .from('users')
-        .update({ last_login_at: new Date().toISOString() })
+        .update({ last_login: new Date().toISOString() })
         .eq('stytch_user_id', stytchUserId);
         
+      if (error) {
+        throw new Error(error.message);
+      }
+      
+      return true;
+      
     } catch (error) {
       console.error('UserMappingService error in updateLastLogin:', error);
-      // Don't throw - this is not critical
+      throw new Error(`Failed to update last login: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get user by Supabase user ID
+   * @param {string} userId - Supabase user ID
+   * @returns {Object} User record
+   */
+  static async getUserById(userId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+        
+      if (error || !data) {
+        throw new Error('User not found');
+      }
+      
+      return data;
+      
+    } catch (error) {
+      console.error('UserMappingService error in getUserById:', error);
+      throw new Error(`Failed to get user by ID: ${error.message}`);
+    }
+  }
+
+  /**
+   * Update user's phone number
+   * @param {string} userId - Supabase user ID
+   * @param {string} newPhoneNumber - New phone number
+   * @returns {Object} Updated user record
+   */
+  static async updateUserPhone(userId, newPhoneNumber) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .update({ 
+          phone: newPhoneNumber,
+          phone_verified: true, // Mark as verified since we verified OTP
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId)
+        .select()
+        .single();
+        
+      if (error) {
+        throw new Error(error.message);
+      }
+      
+      console.log('✅ Phone number updated successfully for user:', userId);
+      return data;
+      
+    } catch (error) {
+      console.error('UserMappingService error in updateUserPhone:', error);
+      throw new Error(`Failed to update phone number: ${error.message}`);
     }
   }
 }

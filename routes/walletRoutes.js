@@ -23,29 +23,9 @@ const handleValidationErrors = (req, res, next) => {
   next();
 };
 
-/**
- * 🔐 Create JWT for Web3Auth authentication
- * POST /api/wallets/auth/token
- */
-router.post('/auth/token', 
-  authenticateToken,
-  walletController.createAuthToken
-);
 
-/**
- * ⚙️ Get Web3Auth client settings
- * GET /api/wallets/config
- */
-router.get('/config',
-  [
-    query('network')
-      .optional()
-      .isIn(['ethereum', 'polygon', 'goerli'])
-      .withMessage('Network must be ethereum, polygon, or goerli')
-  ],
-  handleValidationErrors,
-  walletController.getClientConfig
-);
+
+
 
 /**
  * 📊 Check wallet status for user
@@ -250,12 +230,6 @@ router.delete('/:walletId',
   walletController.deactivateWallet
 );
 
-/**
- * ✅ Check Web3Auth configuration status
- * GET /api/wallets/web3auth/status
- */
-router.get('/web3auth/status',
-  walletController.getWeb3AuthStatus
-);
+
 
 export default router; 

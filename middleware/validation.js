@@ -259,6 +259,67 @@ export const completeLoginSchema = Joi.object({
   sessionId: Joi.string().uuid().required()
 });
 
+// NEW: Sequential Authentication Flow Schemas
+export const phoneLoginSchema = Joi.object({
+  phoneNumber: Joi.string()
+    .pattern(/^(\+|%2B|\s)[1-9]\d{1,14}$/)
+    .required()
+    .custom((value, helpers) => {
+      // Normalize the phone number by converting space or %2B to +
+      let normalized = value.replace(/^(\s|%2B)/, '+');
+      
+      // Validate the normalized format
+      if (!/^\+[1-9]\d{1,14}$/.test(normalized)) {
+        return helpers.error('any.invalid');
+      }
+      
+      return normalized;
+    }, 'Phone number normalization')
+});
+
+export const phoneVerifySchema = Joi.object({
+  sessionId: Joi.string().uuid().required(),
+  otp: Joi.string().pattern(/^\d{6}$/).required()
+});
+
+export const emailLoginSchema = Joi.object({
+  sessionId: Joi.string().uuid().required(),
+  email: Joi.string().email().required()
+});
+
+export const emailVerifySchema = Joi.object({
+  sessionId: Joi.string().uuid().required(),
+  otp: Joi.string().pattern(/^\d{6}$/).required()
+});
+
+// NEW: Phone Change Validation Schemas
+export const phoneChangeStartSchema = Joi.object({
+  newPhoneNumber: Joi.string()
+    .pattern(/^(\+|%2B|\s)[1-9]\d{1,14}$/)
+    .required()
+    .custom((value, helpers) => {
+      // Normalize the phone number by converting space or %2B to +
+      let normalized = value.replace(/^(\s|%2B)/, '+');
+      
+      // Validate the normalized format
+      if (!/^\+[1-9]\d{1,14}$/.test(normalized)) {
+        return helpers.error('any.invalid');
+      }
+      
+      return normalized;
+    }, 'Phone number normalization')
+});
+
+export const phoneChangeVerifyOldSchema = Joi.object({
+  sessionId: Joi.string().uuid().required(),
+  otp: Joi.string().pattern(/^\d{6}$/).required()
+});
+
+export const phoneChangeVerifyNewSchema = Joi.object({
+  sessionId: Joi.string().uuid().required(),
+  otp: Joi.string().pattern(/^\d{6}$/).required()
+});
+
 export { validateBody, validateQuery };
 
 export { ValidationMiddleware }; 

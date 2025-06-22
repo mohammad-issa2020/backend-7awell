@@ -17,7 +17,14 @@ import {
   startVerificationSchema,
   sendVerificationOTPSchema,
   verifyVerificationOTPSchema,
-  completeLoginSchema
+  completeLoginSchema,
+  phoneLoginSchema,
+  phoneVerifySchema,
+  emailLoginSchema,
+  emailVerifySchema,
+  phoneChangeStartSchema,
+  phoneChangeVerifyOldSchema,
+  phoneChangeVerifyNewSchema
 } from '../middleware/validation.js';
 
 const router = express.Router();
@@ -119,19 +126,67 @@ router.get(
   authController.getVerificationStatus
 );
 
-// Wallet management routes (require authentication)
+// NEW: Sequential Authentication Flow Routes
+// Step 1: Send phone OTP
 router.post(
-  '/create-wallet',
-  authenticateToken,
-  authActivityLogger('Create Wallet'),
-  authController.createWallet
+  '/login/phone',
+  validateBody(phoneLoginSchema),
+  authActivityLogger('Start Phone Login'),
+  authController.startPhoneLogin
 );
 
-router.get(
-  '/wallet',
-  authenticateToken,
-  authActivityLogger('Get Wallet Info'),
-  authController.getWallet
+// Step 2: Verify phone OTP
+router.post(
+  '/login/phone/verify',
+  validateBody(phoneVerifySchema),
+  authActivityLogger('Verify Phone OTP'),
+  authController.verifyPhoneOTP
 );
+
+// Step 3: Send email OTP  
+router.post(
+  '/login/email',
+  validateBody(emailLoginSchema),
+  authActivityLogger('Start Email Login'),
+  authController.startEmailLogin
+);
+
+// Step 4: Verify email OTP and complete login
+router.post(
+  '/login/email/verify',
+  validateBody(emailVerifySchema),
+  authActivityLogger('Verify Email OTP and Complete Login'),
+  authController.verifyEmailOTPAndComplete
+);
+
+// NEW: Phone Change with OTP Verification (Guarded Operation)
+// Step 1: Start phone change - Send OTP to old phone
+router.post(
+  '/phone/change/start',
+  authenticateToken,
+  validateBody(phoneChangeStartSchema),
+  authActivityLogger('Start Phone Change'),
+  authController.startPhoneChange
+);
+
+// Step 2: Verify old phone OTP - Send OTP to new phone
+router.post(
+  '/phone/change/verify-old',
+  authenticateToken,
+  validateBody(phoneChangeVerifyOldSchema),
+  authActivityLogger('Verify Old Phone OTP'),
+  authController.verifyOldPhoneOTP
+);
+
+// Step 3: Verify new phone OTP and complete change
+router.post(
+  '/phone/change/verify-new',
+  authenticateToken,
+  validateBody(phoneChangeVerifyNewSchema),
+  authActivityLogger('Verify New Phone OTP and Complete Change'),
+  authController.verifyNewPhoneOTPAndComplete
+);
+
+
 
 export default router; 

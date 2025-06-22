@@ -48,30 +48,148 @@ class ContactsWithAccounts {
   }
 
   /**
-   * Sync user contacts
+   * Sync user contacts with optimized batch processing
    * @param {string} userId - User ID
    * @param {Array} phoneNumbers - Array of phone numbers from user's contacts
    * @param {number} deviceContactsCount - Total contacts on device
+   * @param {Object} options - Sync options
    * @returns {Object} Sync result
    */
-  static async syncContacts(userId, phoneNumbers, deviceContactsCount) {
+  static async syncContacts(userId, phoneNumbers, deviceContactsCount, options = {}) {
     try {
       // Convert phone numbers to hashes
       const phoneHashes = phoneNumbers.map(phone => this.createPhoneHash(phone));
 
+      // Get optimal batch size
+      const optimalBatchSize = await this.getOptimalBatchSize(phoneNumbers.length);
+      const batchSize = options.batchSize || optimalBatchSize;
+
+      // Use the optimized database function
       const { data, error } = await supabaseAdmin
         .rpc('sync_user_contacts', {
           p_owner_id: userId,
           p_phone_hashes: phoneHashes,
-          p_device_contacts_count: deviceContactsCount
+          p_device_contacts_count: deviceContactsCount,
+          p_batch_size: batchSize
         });
 
       if (error) throw error;
 
-      return data;
+      return {
+        total_processed: data.total_processed,
+        contacts_inserted: data.contacts_inserted,
+        contacts_updated: data.contacts_updated,
+        matched_contacts: data.matched_contacts,
+        processing_time_ms: data.processing_time_ms,
+        batch_size: data.batch_size,
+        sync_completed: true
+      };
     } catch (error) {
       console.error('Error syncing contacts:', error);
       throw new Error(`Failed to sync contacts: ${error.message}`);
+    }
+  }
+
+  /**
+   * Bulk insert contacts using optimized database function
+   * @param {Array} contacts - Array of contact objects
+   * @param {Object} options - Insert options
+   * @returns {Object} Insert result
+   */
+  static async bulkInsertContacts(contacts, options = {}) {
+    try {
+      // Get optimal batch size
+      const optimalBatchSize = await this.getOptimalBatchSize(contacts.length);
+      const batchSize = options.batchSize || optimalBatchSize;
+
+      // Use the optimized database function
+      const { data, error } = await supabaseAdmin
+        .rpc('bulk_insert_contacts', {
+          p_contacts: JSON.stringify(contacts),
+          p_batch_size: batchSize
+        });
+
+      if (error) throw error;
+
+      return {
+        total_processed: data.total_processed,
+        contacts_inserted: data.contacts_inserted,
+        contacts_updated: data.contacts_updated,
+        matched_contacts: data.matched_contacts,
+        processing_time_ms: data.processing_time_ms,
+        batch_size: data.batch_size
+      };
+    } catch (error) {
+      console.error('Error bulk inserting contacts:', error);
+      throw new Error(`Failed to bulk insert contacts: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get optimal batch size for contact operations
+   * @param {number} contactCount - Number of contacts to process
+   * @param {number} avgContactSizeKb - Average contact size in KB
+   * @returns {number} Optimal batch size
+   */
+  static async getOptimalBatchSize(contactCount, avgContactSizeKb = 0.5) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .rpc('get_optimal_batch_size', {
+          p_estimated_contact_count: contactCount,
+          p_avg_contact_size_kb: avgContactSizeKb
+        });
+
+      if (error) throw error;
+
+      return data || 500; // Default fallback
+    } catch (error) {
+      console.error('Error getting optimal batch size:', error);
+      return 500; // Default fallback
+    }
+  }
+
+  /**
+   * Estimate sync performance
+   * @param {number} contactCount - Number of contacts
+   * @param {number} batchSize - Optional batch size
+   * @returns {Object} Performance estimates
+   */
+  static async estimateSyncPerformance(contactCount, batchSize = null) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .rpc('estimate_sync_performance', {
+          p_contact_count: contactCount,
+          p_batch_size: batchSize
+        });
+
+      if (error) throw error;
+
+      return data && data.length > 0 ? data[0] : null;
+    } catch (error) {
+      console.error('Error estimating sync performance:', error);
+      throw new Error(`Failed to estimate sync performance: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get contact sync statistics
+   * @param {number} days - Number of days to look back
+   * @returns {Array} Sync statistics
+   */
+  static async getSyncStatistics(days = 30) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('contact_sync_stats')
+        .select('*')
+        .gte('sync_date', new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+        .order('sync_date', { ascending: false });
+
+      if (error) throw error;
+
+      return data || [];
+    } catch (error) {
+      console.error('Error getting sync statistics:', error);
+      throw new Error(`Failed to get sync statistics: ${error.message}`);
     }
   }
 

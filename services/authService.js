@@ -11,13 +11,12 @@ class AuthService {
     this.rateLimitStore = new Map();
     this.otpAttempts = new Map();
     
-    // Multi-step authentication tracking
-    this.verificationSessions = new Map(); // Track verification progress
+
     
     // Clean up rate limits every 5 minutes
     setInterval(() => {
       this.cleanupRateLimits();
-      this.cleanupVerificationSessions();
+      this.cleanupAuthSessions();
     }, 5 * 60 * 1000);
   }
 
@@ -357,483 +356,724 @@ class AuthService {
     }
   }
 
+
+
+
+
   /**
-   * Start multi-step verification session
+   * Send OTP to phone number
+   * @param {string} phoneNumber - Phone number
+   * @returns {Object} Stytch response
+   */
+  async sendPhoneOTP(phoneNumber) {
+    try {
+      const result = await stytchClient.otps.sms.send({
+        phone_number: phoneNumber,
+        expiration_minutes: Math.floor(this.OTP_EXPIRY / 60)
+      });
+      
+      if (result.status_code !== 200) {
+        throw new Error('Failed to send phone OTP');
+      }
+      
+      return result;
+    } catch (error) {
+      throw new Error(`Phone OTP error: ${error.message}`);
+    }
+  }
+
+  /**
+   * Send OTP to email
+   * @param {string} email - Email address
+   * @returns {Object} Stytch response  
+   */
+  async sendEmailOTP(email) {
+    try {
+      const result = await stytchClient.otps.email.send({
+        email: email,
+        expiration_minutes: Math.floor(this.OTP_EXPIRY / 60)
+      });
+      
+      if (result.status_code !== 200) {
+        throw new Error('Failed to send email OTP');
+      }
+      
+      return result;
+    } catch (error) {
+      throw new Error(`Email OTP error: ${error.message}`);
+    }
+  }
+
+
+
+  /**
+   * Clean up expired authentication sessions
+   */
+  cleanupAuthSessions() {
+    const now = Date.now();
+    
+    // Clean up sequential authentication sessions
+    if (this.sequentialAuthSessions) {
+      for (const [sessionId, session] of this.sequentialAuthSessions.entries()) {
+        if (now > session.expiresAt) {
+          this.sequentialAuthSessions.delete(sessionId);
+        }
+      }
+    }
+    
+    // Clean up phone change sessions
+    if (this.phoneChangeSessions) {
+      for (const [sessionId, session] of this.phoneChangeSessions.entries()) {
+        if (now > session.expiresAt) {
+          this.phoneChangeSessions.delete(sessionId);
+        }
+      }
+    }
+  }
+
+  // NEW: Sequential Authentication Flow Methods
+
+  /**
+   * Step 1: Start phone login - Send OTP to phone
    * @param {string} phoneNumber - User's phone number
-   * @param {string} email - User's email address  
-   * @returns {Object} Verification session details
+   * @returns {Object} Session information with phone availability
    */
-  async startVerificationSession(phoneNumber, email) {
+  async startPhoneLogin(phoneNumber) {
     try {
-      if (!phoneNumber || !email) {
-        throw new Error('Both phone number and email are required');
-      }
-
-      // Validate phone number format
-      const phoneRegex = /^\+[1-9]\d{1,14}$/;
-      if (!phoneRegex.test(phoneNumber)) {
-        throw new Error('Invalid phone number format. Use international format: +1234567890');
-      }
-
-      // Validate email format
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        throw new Error('Invalid email format');
-      }
-
-      console.log(`🚀 Starting verification session for phone: ${phoneNumber}, email: ${email}`);
-
-      const sessionId = uuidv4();
-      const sessionData = {
-        sessionId,
-        phoneNumber,
-        email,
-        phoneVerified: false,
-        emailVerified: false,
-        phoneMethodId: null,
-        emailMethodId: null,
-        createdAt: Date.now(),
-        expiresAt: Date.now() + (30 * 60 * 1000), // 30 minutes
-        phoneOtpAttempts: 0,
-        emailOtpAttempts: 0
-      };
-
-      this.verificationSessions.set(sessionId, sessionData);
-
-      console.log(`🆔 Created verification session: ${sessionId}`);
-
-      return {
-        sessionId,
-        phoneNumber,
-        email,
-        phoneVerified: false,
-        emailVerified: false,
-        expiresAt: sessionData.expiresAt,
-        message: 'Verification session created. Please verify both phone and email.'
-      };
-
-    } catch (error) {
-      console.error(`❌ Error starting verification session: ${error.message}`);
-      throw new Error(`Error starting verification session: ${error.message}`);
-    }
-  }
-
-  /**
-   * Send OTP for multi-step verification
-   * @param {string} sessionId - Verification session ID
-   * @param {string} medium - 'phone' or 'email'
-   * @param {string} channel - 'sms', 'whatsapp', or 'email'
-   * @returns {Object} OTP send result
-   */
-  async sendVerificationOTP(sessionId, medium, channel = 'sms') {
-    try {
-      const sessionData = this.verificationSessions.get(sessionId);
+      console.log('📱 Starting phone login for:', phoneNumber);
       
-      if (!sessionData) {
-        throw new Error('Verification session not found or expired');
-      }
-
-      if (Date.now() > sessionData.expiresAt) {
-        this.verificationSessions.delete(sessionId);
-        throw new Error('Verification session expired');
-      }
-
-      let value;
-      if (medium === 'phone') {
-        value = sessionData.phoneNumber;
-        if (sessionData.phoneVerified) {
-          throw new Error('Phone number already verified in this session');
-        }
-      } else if (medium === 'email') {
-        value = sessionData.email;
-        if (sessionData.emailVerified) {
-          throw new Error('Email already verified in this session');
-        }
-      } else {
-        throw new Error('Invalid medium. Must be phone or email.');
-      }
-
       // Check rate limiting
-      const rateLimitKey = `${medium}:${value}`;
-      const now = Date.now();
-      const rateLimitData = this.rateLimitStore.get(rateLimitKey) || { count: 0, resetTime: now + 5 * 60 * 1000 };
-      
-      if (now < rateLimitData.resetTime && rateLimitData.count >= this.OTP_RATE_LIMIT) {
-        throw new Error('Too many OTP requests. Please try again in 5 minutes.');
+      if (this.isRateLimited(phoneNumber)) {
+        throw new Error('Too many login attempts. Please try again later.');
       }
       
-      if (now >= rateLimitData.resetTime) {
-        rateLimitData.count = 0;
-        rateLimitData.resetTime = now + 5 * 60 * 1000;
-      }
-
-      let otpResult;
-      console.log(`📱 Sending OTP to ${medium}:${value} via ${channel} for session ${sessionId}`);
-
-      try {
-        if (medium === 'phone') {
-          if (channel === 'whatsapp') {
-            otpResult = await stytchClient.otps.whatsapp.loginOrCreate({
-              phone_number: value,
-              expiration_minutes: 5
-            });
-          } else {
-            otpResult = await stytchClient.otps.sms.loginOrCreate({
-              phone_number: value,
-              expiration_minutes: 5
-            });
-          }
-        } else if (medium === 'email') {
-          otpResult = await stytchClient.otps.email.loginOrCreate({
-            email: value,
-            expiration_minutes: 5
-          });
-        }
-
-        console.log(`🔍 Stytch OTP Response Status: ${otpResult.status_code}`);
-        
-        if (otpResult.status_code !== 200) {
-          throw new Error(`Stytch returned status ${otpResult.status_code}: ${otpResult.error_message || 'Unknown error'}`);
-        }
-        
-      } catch (stytchError) {
-        console.error(`❌ Stytch OTP Error:`, stytchError);
-        
-        // Handle specific Stytch errors
-        if (stytchError.message.includes('phone_number_not_found')) {
-          throw new Error('Phone number format is invalid or not supported');
-        }
-        if (stytchError.message.includes('email_not_found')) {
-          throw new Error('Email format is invalid');
-        }
-        
-        throw new Error(`Failed to send OTP: ${stytchError.message}`);
-      }
-
-      // Extract method_id
-      let methodId = otpResult.method_id || otpResult.phone_id || otpResult.email_id;
+      // Check phone availability
+      console.log('🔍 Checking phone availability...');
+      const phoneAvailability = await this.checkAvailability('phone', phoneNumber);
       
-      if (!methodId && otpResult.phone_numbers && otpResult.phone_numbers.length > 0) {
-        methodId = otpResult.phone_numbers[0].phone_id;
-      }
-      if (!methodId && otpResult.emails && otpResult.emails.length > 0) {
-        methodId = otpResult.emails[0].email_id;
-      }
-
-      if (!methodId) {
-        throw new Error('Failed to get method_id from Stytch response');
-      }
-
-      // Update session data
-      if (medium === 'phone') {
-        sessionData.phoneMethodId = methodId;
-      } else {
-        sessionData.emailMethodId = methodId;
-      }
-
-      this.verificationSessions.set(sessionId, sessionData);
-
+      // Send OTP to phone
+      console.log('📤 Sending phone OTP...');
+      const phoneResult = await this.sendPhoneOTP(phoneNumber);
+      
+      // Create session
+      const sessionId = `seq_auth_${uuidv4()}`;
+      const expiresAt = new Date(Date.now() + (this.OTP_EXPIRY * 1000));
+      
+      // Store sequential auth session
+      this.sequentialAuthSessions = this.sequentialAuthSessions || new Map();
+      this.sequentialAuthSessions.set(sessionId, {
+        sessionId,
+        phoneNumber,
+        phoneAvailable: phoneAvailability.available,
+        phoneVerified: false,
+        phoneAttempts: 0,
+        email: null,
+        emailAvailable: null,
+        emailVerified: false,
+        emailAttempts: 0,
+        step: 'phone_verification', // Current step
+        createdAt: Date.now(),
+        expiresAt: expiresAt.getTime(),
+        stytchPhoneId: phoneResult.request_id,
+        stytchEmailId: null
+      });
+      
       // Update rate limiting
-      rateLimitData.count++;
-      this.rateLimitStore.set(rateLimitKey, rateLimitData);
-
-      console.log(`✅ OTP sent successfully! Method ID: ${methodId}`);
-
+      this.updateRateLimit(phoneNumber);
+      
+      console.log('✅ Phone login session created:', sessionId);
+      
       return {
         sessionId,
-        medium,
-        channel,
-        methodId,
-        expiresIn: 5 * 60, // 5 minutes
-        message: `OTP sent to ${medium === 'phone' ? 'phone number' : 'email'}`
+        step: 'phone_verification',
+        phoneAvailable: phoneAvailability.available,
+        expiresAt: expiresAt.toISOString(),
+        message: phoneAvailability.available
+          ? 'New account will be created. Phone OTP sent.'
+          : 'Login to existing account. Phone OTP sent.'
       };
-
+      
     } catch (error) {
-      console.error(`❌ Error sending verification OTP: ${error.message}`);
-      throw new Error(`Error sending verification OTP: ${error.message}`);
+      console.error('❌ Phone login error:', error);
+      throw new Error(`Phone login failed: ${error.message}`);
     }
   }
 
   /**
-   * Verify OTP for multi-step verification (doesn't create session)
-   * @param {string} sessionId - Verification session ID
-   * @param {string} medium - 'phone' or 'email'
-   * @param {string} otp - 6-digit OTP code
+   * Step 2: Verify phone OTP
+   * @param {string} sessionId - Sequential auth session ID
+   * @param {string} otp - Phone OTP code
    * @returns {Object} Verification result
    */
-  async verifyVerificationOTP(sessionId, medium, otp) {
+  async verifyPhoneOTP(sessionId, otp) {
     try {
-      const sessionData = this.verificationSessions.get(sessionId);
+      console.log('🔐 Verifying phone OTP for session:', sessionId);
       
-      if (!sessionData) {
-        throw new Error('Verification session not found or expired');
+      // Initialize if not exists
+      this.sequentialAuthSessions = this.sequentialAuthSessions || new Map();
+      
+      // Get session
+      const session = this.sequentialAuthSessions.get(sessionId);
+      if (!session) {
+        throw new Error('Invalid or expired session');
       }
-
-      if (Date.now() > sessionData.expiresAt) {
-        this.verificationSessions.delete(sessionId);
-        throw new Error('Verification session expired');
+      
+      // Check session expiry
+      if (Date.now() > session.expiresAt) {
+        this.sequentialAuthSessions.delete(sessionId);
+        throw new Error('Session expired');
       }
-
-      let methodId, attemptField;
-      if (medium === 'phone') {
-        methodId = sessionData.phoneMethodId;
-        attemptField = 'phoneOtpAttempts';
-        
-        if (sessionData.phoneVerified) {
-          throw new Error('Phone number already verified in this session');
-        }
-      } else if (medium === 'email') {
-        methodId = sessionData.emailMethodId;
-        attemptField = 'emailOtpAttempts';
-        
-        if (sessionData.emailVerified) {
-          throw new Error('Email already verified in this session');
-        }
-      } else {
-        throw new Error('Invalid medium. Must be phone or email.');
+      
+      // Check step
+      if (session.step !== 'phone_verification') {
+        throw new Error('Invalid step. Expected phone verification.');
       }
-
-      if (!methodId) {
-        throw new Error(`No OTP request found for ${medium}. Please request OTP first.`);
-      }
-
+      
       // Check attempts
-      if (sessionData[attemptField] >= this.MAX_OTP_ATTEMPTS) {
-        throw new Error(`Too many failed attempts for ${medium}. Please start a new verification session.`);
+      if (session.phoneAttempts >= this.MAX_OTP_ATTEMPTS) {
+        this.sequentialAuthSessions.delete(sessionId);
+        throw new Error('Maximum phone OTP attempts exceeded');
       }
-
+      
+      // Verify phone OTP with Stytch
       try {
-        console.log(`🔐 Verifying ${medium} OTP - Method ID: ${methodId}, Code: ${otp}`);
-        
-        // Authenticate with Stytch - but don't create session yet
-        const authResult = await stytchClient.otps.authenticate({
-          method_id: methodId,
-          code: otp,
-          session_duration_minutes: 5 // Short session just for verification
+        const phoneResult = await stytchClient.otps.sms.authenticate({
+          method_id: session.stytchPhoneId,
+          code: otp
         });
-
-        if (authResult.status_code !== 200) {
-          sessionData[attemptField]++;
-          this.verificationSessions.set(sessionId, sessionData);
-          throw new Error('Invalid OTP code');
+        
+        if (phoneResult.status_code !== 200) {
+          throw new Error('Invalid OTP');
         }
-
-        console.log(`✅ ${medium} OTP verification successful!`);
-
-        // Mark as verified
-        if (medium === 'phone') {
-          sessionData.phoneVerified = true;
-        } else {
-          sessionData.emailVerified = true;
-        }
-
-        this.verificationSessions.set(sessionId, sessionData);
-
-        // Check if both are verified
-        const bothVerified = sessionData.phoneVerified && sessionData.emailVerified;
-
+        
+        console.log('✅ Phone OTP verified successfully');
+        
+        // Update session
+        session.phoneVerified = true;
+        session.step = 'email_input';
+        session.phoneAttempts = 0; // Reset attempts after success
+        this.sequentialAuthSessions.set(sessionId, session);
+        
         return {
           sessionId,
-          medium,
-          verified: true,
-          phoneVerified: sessionData.phoneVerified,
-          emailVerified: sessionData.emailVerified,
-          bothVerified,
-          message: bothVerified ? 
-            'Both phone and email verified! You can now login.' : 
-            `${medium === 'phone' ? 'Phone number' : 'Email'} verified. Please verify ${medium === 'phone' ? 'email' : 'phone number'} to continue.`
+          step: 'email_input',
+          phoneVerified: true,
+          message: 'Phone verified successfully. Please provide your email address.'
         };
-
+        
       } catch (error) {
-        sessionData[attemptField]++;
-        this.verificationSessions.set(sessionId, sessionData);
-        throw error;
+        // Increment attempts
+        session.phoneAttempts++;
+        this.sequentialAuthSessions.set(sessionId, session);
+        
+        throw new Error(`Phone OTP verification failed: ${error.message}`);
       }
-
+      
     } catch (error) {
-      console.error(`❌ Error verifying ${medium} OTP: ${error.message}`);
-      throw new Error(`Error verifying ${medium} OTP: ${error.message}`);
+      console.error('❌ Phone OTP verification error:', error);
+      throw new Error(`Phone OTP verification failed: ${error.message}`);
     }
   }
 
   /**
-   * Complete login after both phone and email verification
-   * @param {string} sessionId - Verification session ID
-   * @returns {Object} Stytch session data
+   * Step 3: Start email login - Send OTP to email
+   * @param {string} sessionId - Sequential auth session ID
+   * @param {string} email - User's email address
+   * @returns {Object} Email verification information
    */
-  async completeLogin(sessionId) {
+  async startEmailLogin(sessionId, email) {
     try {
-      const sessionData = this.verificationSessions.get(sessionId);
+      console.log('📧 Starting email login for session:', sessionId, 'email:', email);
       
-      if (!sessionData) {
-        throw new Error('Verification session not found or expired');
-      }
-
-      if (Date.now() > sessionData.expiresAt) {
-        this.verificationSessions.delete(sessionId);
-        throw new Error('Verification session expired');
-      }
-
-      if (!sessionData.phoneVerified || !sessionData.emailVerified) {
-        throw new Error('Both phone and email must be verified before login');
-      }
-
-      console.log(`🎉 Completing login for verified session: ${sessionId}`);
-
-      // Create or find user first
-      let user = null;
-      try {
-        // Try to find by phone first
-        const phoneSearchResult = await stytchClient.users.search({
-          query: {
-            operator: 'AND',
-            operands: [{
-              filter_name: 'phone_number',
-              filter_value: [sessionData.phoneNumber]
-            }]
-          }
-        });
-        
-        if (phoneSearchResult.results && phoneSearchResult.results.length > 0) {
-          user = phoneSearchResult.results[0];
-        }
-      } catch (error) {
-        console.log('User not found by phone, will create new one');
-      }
-
-      if (!user) {
-        // Create new user with both phone and email
-        console.log(`👤 Creating new user with phone: ${sessionData.phoneNumber} and email: ${sessionData.email}`);
-        
-        const createUserResult = await stytchClient.users.create({
-          phone_number: sessionData.phoneNumber,
-          email: sessionData.email
-        });
-        user = createUserResult.user;
-      }
-
-      // Create session using Magic Links loginOrCreate method
-      let sessionResult;
+      // Initialize if not exists
+      this.sequentialAuthSessions = this.sequentialAuthSessions || new Map();
       
-      try {
-        console.log('🔗 Creating session via Magic Links');
-        
-        sessionResult = await stytchClient.magicLinks.email.loginOrCreate({
-          email: sessionData.email,
-          session_duration_minutes: 60 * 24 * 7 // 7 days
-        });
-        
-        console.log('✅ Session created successfully via Magic Links');
-        
-      } catch (magicLinkError) {
-        console.log('🔄 Magic Links failed, creating enhanced custom verified session');
-        console.error('Magic Link error:', magicLinkError.message);
-        
-        // Create an enhanced custom session token with embedded user info
-        const timestamp = Date.now();
-        const userInfo = {
-          user_id: user.user_id,
-          email: sessionData.email,
-          phone: sessionData.phoneNumber,
-          verified_at: new Date().toISOString(),
-          session_id: sessionId,
-          expires_at: new Date(timestamp + (60 * 24 * 7 * 60 * 1000)).toISOString(),
-          created_at: user.created_at,
-          status: user.status
-        };
-        
-        const customSessionToken = `stytch_verified_${sessionId}_${timestamp}`;
-        const customSessionJWT = Buffer.from(JSON.stringify(userInfo)).toString('base64');
-        
-        sessionResult = {
-          user: user,
-          session_token: customSessionToken,
-          session_jwt: customSessionJWT,
-          userInfo: userInfo, // Store user info for validation
-          session: {
-            session_id: sessionId,
-            user_id: user.user_id,
-            started_at: new Date().toISOString(),
-            expires_at: new Date(timestamp + (60 * 24 * 7 * 60 * 1000)).toISOString(),
-            attributes: {
-              phone_verified: true,
-              email_verified: true,
-              verification_method: 'multi_step_otp'
-            }
-          }
-        };
-        
-        // Store the session info for validation (in production, use database)
-        this.customSessions = this.customSessions || new Map();
-        this.customSessions.set(customSessionToken, userInfo);
-        
-        console.log('✅ Enhanced custom verified session created');
+      // Get session
+      const session = this.sequentialAuthSessions.get(sessionId);
+      if (!session) {
+        throw new Error('Invalid or expired session');
       }
-
-      // Clean up verification session
-      this.verificationSessions.delete(sessionId);
-
-      console.log(`🎉 Login completed successfully for user: ${user.user_id}`);
-
+      
+      // Check session expiry
+      if (Date.now() > session.expiresAt) {
+        this.sequentialAuthSessions.delete(sessionId);
+        throw new Error('Session expired');
+      }
+      
+      // Check step
+      if (session.step !== 'email_input') {
+        throw new Error('Invalid step. Phone must be verified first.');
+      }
+      
+      // Check if phone was verified
+      if (!session.phoneVerified) {
+        throw new Error('Phone verification required before email step');
+      }
+      
+      // Check email availability
+      console.log('🔍 Checking email availability...');
+      const emailAvailability = await this.checkAvailability('email', email);
+      
+      // Send OTP to email
+      console.log('📤 Sending email OTP...');
+      const emailResult = await this.sendEmailOTP(email);
+      
+      // Update session
+      session.email = email;
+      session.emailAvailable = emailAvailability.available;
+      session.step = 'email_verification';
+      session.stytchEmailId = emailResult.request_id;
+      this.sequentialAuthSessions.set(sessionId, session);
+      
+      console.log('✅ Email OTP sent for session:', sessionId);
+      
       return {
-        user: {
-          id: user.user_id,
-          phoneNumber: user.phone_numbers?.[0]?.phone_number || sessionData.phoneNumber,
-          email: user.emails?.[0]?.email || sessionData.email,
-          created_at: user.created_at,
-          status: user.status
-        },
-        session: sessionResult.session,
-        session_token: sessionResult.session_token,
-        session_jwt: sessionResult.session_jwt,
-        message: 'Login successful! Both phone and email verified.'
+        sessionId,
+        step: 'email_verification',
+        emailAvailable: emailAvailability.available,
+        message: emailAvailability.available
+          ? 'Email OTP sent for new account creation.'
+          : 'Email OTP sent for existing account login.'
       };
-
+      
     } catch (error) {
-      console.error(`❌ Error completing login: ${error.message}`);
-      throw new Error(`Error completing login: ${error.message}`);
+      console.error('❌ Email login error:', error);
+      throw new Error(`Email login failed: ${error.message}`);
     }
   }
 
   /**
-   * Get verification session status
-   * @param {string} sessionId - Verification session ID
-   * @returns {Object} Session status
+   * Step 4: Verify email OTP and complete login
+   * @param {string} sessionId - Sequential auth session ID
+   * @param {string} otp - Email OTP code
+   * @returns {Object} Complete authentication result with token
    */
-  getVerificationSessionStatus(sessionId) {
-    const sessionData = this.verificationSessions.get(sessionId);
-    
-    if (!sessionData) {
-      throw new Error('Verification session not found');
-    }
-
-    if (Date.now() > sessionData.expiresAt) {
-      this.verificationSessions.delete(sessionId);
-      throw new Error('Verification session expired');
-    }
-
-    return {
-      sessionId,
-      phoneNumber: sessionData.phoneNumber,
-      email: sessionData.email,
-      phoneVerified: sessionData.phoneVerified,
-      emailVerified: sessionData.emailVerified,
-      bothVerified: sessionData.phoneVerified && sessionData.emailVerified,
-      expiresAt: sessionData.expiresAt,
-      timeRemaining: Math.max(0, sessionData.expiresAt - Date.now())
-    };
-  }
-
-  /**
-   * Clean up expired verification sessions
-   */
-  cleanupVerificationSessions() {
-    const now = Date.now();
-    for (const [sessionId, sessionData] of this.verificationSessions.entries()) {
-      if (now > sessionData.expiresAt) {
-        this.verificationSessions.delete(sessionId);
-        console.log(`🧹 Cleaned up expired verification session: ${sessionId}`);
+  async verifyEmailOTPAndComplete(sessionId, otp) {
+    try {
+      console.log('🎉 Completing login for session:', sessionId);
+      
+      // Initialize if not exists
+      this.sequentialAuthSessions = this.sequentialAuthSessions || new Map();
+      
+      // Get session
+      const session = this.sequentialAuthSessions.get(sessionId);
+      if (!session) {
+        throw new Error('Invalid or expired session');
       }
+      
+      // Check session expiry
+      if (Date.now() > session.expiresAt) {
+        this.sequentialAuthSessions.delete(sessionId);
+        throw new Error('Session expired');
+      }
+      
+      // Check step
+      if (session.step !== 'email_verification') {
+        throw new Error('Invalid step. Expected email verification.');
+      }
+      
+      // Check if phone was verified
+      if (!session.phoneVerified) {
+        throw new Error('Phone verification required');
+      }
+      
+      // Check attempts
+      if (session.emailAttempts >= this.MAX_OTP_ATTEMPTS) {
+        this.sequentialAuthSessions.delete(sessionId);
+        throw new Error('Maximum email OTP attempts exceeded');
+      }
+      
+      // Verify email OTP with Stytch
+      try {
+        const emailResult = await stytchClient.otps.email.authenticate({
+          method_id: session.stytchEmailId,
+          code: otp
+        });
+        
+        if (emailResult.status_code !== 200) {
+          throw new Error('Invalid OTP');
+        }
+        
+        console.log('✅ Email OTP verified successfully');
+        
+        // Both phone and email verified - proceed with user creation/login
+        let stytchUser;
+        
+        if (session.phoneAvailable && session.emailAvailable) {
+          // Create new user
+          console.log('👤 Creating new Stytch user...');
+          const createResult = await stytchClient.users.create({
+            phone_number: session.phoneNumber,
+            email: session.email
+          });
+          stytchUser = createResult.user;
+        } else {
+          // Find existing user
+          console.log('🔍 Finding existing Stytch user...');
+          const searchResult = await stytchClient.users.search({
+            query: {
+              operator: 'OR',
+              operands: [
+                { filter_name: 'phone_number', filter_value: [session.phoneNumber] },
+                { filter_name: 'email', filter_value: [session.email] }
+              ]
+            }
+          });
+          
+          if (searchResult.results?.length > 0) {
+            stytchUser = searchResult.results[0];
+          } else {
+            throw new Error('User not found');
+          }
+        }
+        
+        // Create Stytch session
+        console.log('🔑 Creating Stytch session...');
+        const stytchSession = await stytchClient.sessions.create({
+          user_id: stytchUser.user_id
+        });
+        
+        // Create or get user in Supabase
+        console.log('💾 Creating/updating user in Supabase...');
+        const UserMappingService = (await import('../services/userMappingService.js')).default;
+        const supabaseUser = await UserMappingService.createOrGetUser({
+          id: stytchUser.user_id,
+          phoneNumber: session.phoneNumber,
+          email: session.email,
+          created_at: stytchUser.created_at,
+          status: stytchUser.status
+        });
+        
+        // Clean up session
+        this.sequentialAuthSessions.delete(sessionId);
+        
+        console.log('🎊 Sequential login completed successfully');
+        
+        return {
+          user: {
+            id: supabaseUser.id,
+            stytch_user_id: stytchUser.user_id,
+            phoneNumber: session.phoneNumber,
+            email: session.email,
+            created_at: supabaseUser.created_at,
+            status: supabaseUser.status
+          },
+          session: {
+            session_id: stytchSession.session.session_id,
+            session_token: stytchSession.session_token,
+            session_jwt: stytchSession.session_jwt,
+            expires_at: stytchSession.session.expires_at
+          },
+          isNewUser: session.phoneAvailable && session.emailAvailable,
+          message: 'Login completed successfully'
+        };
+        
+      } catch (error) {
+        // Increment attempts
+        session.emailAttempts++;
+        this.sequentialAuthSessions.set(sessionId, session);
+        
+        throw new Error(`Email OTP verification failed: ${error.message}`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Login completion error:', error);
+      throw new Error(`Login completion failed: ${error.message}`);
+    }
+  }
+
+  // NEW: Phone Change Operations (Guarded Operations)
+
+  /**
+   * Step 1: Start phone change - Send OTP to current phone
+   * @param {string} userId - User ID from auth token
+   * @param {string} newPhoneNumber - New phone number to change to
+   * @returns {Object} Phone change session information
+   */
+  async startPhoneChange(userId, newPhoneNumber) {
+    try {
+      console.log('📱 Starting phone change for user:', userId, 'to:', newPhoneNumber);
+      
+      // Get user's current phone number from Supabase
+      const UserMappingService = (await import('../services/userMappingService.js')).default;
+      const user = await UserMappingService.getUserById(userId);
+      
+      if (!user || !user.phone_number) {
+        throw new Error('User not found or has no current phone number');
+      }
+      
+      const currentPhoneNumber = user.phone_number;
+      
+      // Check if new phone number is different from current
+      if (currentPhoneNumber === newPhoneNumber) {
+        throw new Error('New phone number must be different from current phone number');
+      }
+      
+      // Check rate limiting for phone changes
+      const rateLimitKey = `phone_change_${userId}`;
+      if (this.isRateLimited(rateLimitKey)) {
+        throw new Error('Too many phone change attempts. Please try again later.');
+      }
+      
+      // Check if new phone number is available (not used by another user)
+      const newPhoneAvailability = await this.checkAvailability('phone', newPhoneNumber);
+      if (!newPhoneAvailability.available) {
+        throw new Error('New phone number is already registered by another user');
+      }
+      
+      // Send OTP to current phone for verification
+      console.log('📤 Sending OTP to current phone:', currentPhoneNumber);
+      const currentPhoneOTPResult = await this.sendPhoneOTP(currentPhoneNumber);
+      
+      // Create phone change session
+      const sessionId = `phone_change_${uuidv4()}`;
+      const expiresAt = new Date(Date.now() + (this.OTP_EXPIRY * 1000));
+      
+      // Initialize phone change sessions if not exists
+      this.phoneChangeSessions = this.phoneChangeSessions || new Map();
+      
+      this.phoneChangeSessions.set(sessionId, {
+        sessionId,
+        userId,
+        currentPhoneNumber,
+        newPhoneNumber,
+        step: 'verify_current_phone', // Current step
+        currentPhoneVerified: false,
+        newPhoneVerified: false,
+        currentPhoneAttempts: 0,
+        newPhoneAttempts: 0,
+        createdAt: Date.now(),
+        expiresAt: expiresAt.getTime(),
+        stytchCurrentPhoneId: currentPhoneOTPResult.request_id,
+        stytchNewPhoneId: null
+      });
+      
+      // Update rate limiting
+      this.updateRateLimit(rateLimitKey);
+      
+      console.log('✅ Phone change session created:', sessionId);
+      
+      return {
+        sessionId,
+        step: 'verify_current_phone',
+        currentPhoneNumber,
+        newPhoneNumber,
+        expiresAt: expiresAt.toISOString(),
+        message: 'Phone change initiated. OTP sent to your current phone number.'
+      };
+      
+    } catch (error) {
+      console.error('❌ Phone change start error:', error);
+      throw new Error(`Phone change start failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Step 2: Verify current phone OTP - Send OTP to new phone
+   * @param {string} userId - User ID from auth token
+   * @param {string} sessionId - Phone change session ID
+   * @param {string} otp - OTP code for current phone
+   * @returns {Object} Verification result
+   */
+  async verifyOldPhoneOTP(userId, sessionId, otp) {
+    try {
+      console.log('🔐 Verifying old phone OTP for user:', userId, 'session:', sessionId);
+      
+      // Initialize if not exists
+      this.phoneChangeSessions = this.phoneChangeSessions || new Map();
+      
+      // Get session
+      const session = this.phoneChangeSessions.get(sessionId);
+      if (!session) {
+        throw new Error('Invalid or expired phone change session');
+      }
+      
+      // Check session ownership
+      if (session.userId !== userId) {
+        throw new Error('Session does not belong to this user');
+      }
+      
+      // Check session expiry
+      if (Date.now() > session.expiresAt) {
+        this.phoneChangeSessions.delete(sessionId);
+        throw new Error('Phone change session expired');
+      }
+      
+      // Check step
+      if (session.step !== 'verify_current_phone') {
+        throw new Error('Invalid step. Expected current phone verification.');
+      }
+      
+      // Check attempts
+      if (session.currentPhoneAttempts >= this.MAX_OTP_ATTEMPTS) {
+        this.phoneChangeSessions.delete(sessionId);
+        throw new Error('Maximum current phone OTP attempts exceeded');
+      }
+      
+      // Verify current phone OTP with Stytch
+      try {
+        const currentPhoneResult = await stytchClient.otps.sms.authenticate({
+          method_id: session.stytchCurrentPhoneId,
+          code: otp
+        });
+        
+        if (currentPhoneResult.status_code !== 200) {
+          throw new Error('Invalid OTP');
+        }
+        
+        console.log('✅ Current phone OTP verified successfully');
+        
+        // Send OTP to new phone
+        console.log('📤 Sending OTP to new phone:', session.newPhoneNumber);
+        const newPhoneOTPResult = await this.sendPhoneOTP(session.newPhoneNumber);
+        
+        // Update session
+        session.currentPhoneVerified = true;
+        session.step = 'verify_new_phone';
+        session.currentPhoneAttempts = 0; // Reset attempts after success
+        session.stytchNewPhoneId = newPhoneOTPResult.request_id;
+        this.phoneChangeSessions.set(sessionId, session);
+        
+        return {
+          sessionId,
+          step: 'verify_new_phone',
+          currentPhoneVerified: true,
+          newPhoneNumber: session.newPhoneNumber,
+          message: 'Current phone verified successfully. OTP sent to your new phone number.'
+        };
+        
+      } catch (error) {
+        // Increment attempts
+        session.currentPhoneAttempts++;
+        this.phoneChangeSessions.set(sessionId, session);
+        
+        throw new Error(`Current phone OTP verification failed: ${error.message}`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Old phone OTP verification error:', error);
+      throw new Error(`Old phone OTP verification failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Step 3: Verify new phone OTP and complete phone change
+   * @param {string} userId - User ID from auth token
+   * @param {string} sessionId - Phone change session ID
+   * @param {string} otp - OTP code for new phone
+   * @returns {Object} Phone change completion result
+   */
+  async verifyNewPhoneOTPAndComplete(userId, sessionId, otp) {
+    try {
+      console.log('🎊 Completing phone change for user:', userId, 'session:', sessionId);
+      
+      // Initialize if not exists
+      this.phoneChangeSessions = this.phoneChangeSessions || new Map();
+      
+      // Get session
+      const session = this.phoneChangeSessions.get(sessionId);
+      if (!session) {
+        throw new Error('Invalid or expired phone change session');
+      }
+      
+      // Check session ownership
+      if (session.userId !== userId) {
+        throw new Error('Session does not belong to this user');
+      }
+      
+      // Check session expiry
+      if (Date.now() > session.expiresAt) {
+        this.phoneChangeSessions.delete(sessionId);
+        throw new Error('Phone change session expired');
+      }
+      
+      // Check step
+      if (session.step !== 'verify_new_phone') {
+        throw new Error('Invalid step. Expected new phone verification.');
+      }
+      
+      // Check if current phone was verified
+      if (!session.currentPhoneVerified) {
+        throw new Error('Current phone verification required');
+      }
+      
+      // Check attempts
+      if (session.newPhoneAttempts >= this.MAX_OTP_ATTEMPTS) {
+        this.phoneChangeSessions.delete(sessionId);
+        throw new Error('Maximum new phone OTP attempts exceeded');
+      }
+      
+      // Verify new phone OTP with Stytch
+      try {
+        const newPhoneResult = await stytchClient.otps.sms.authenticate({
+          method_id: session.stytchNewPhoneId,
+          code: otp
+        });
+        
+        if (newPhoneResult.status_code !== 200) {
+          throw new Error('Invalid OTP');
+        }
+        
+        console.log('✅ New phone OTP verified successfully');
+        
+        // Both phones verified - update user's phone number in Stytch
+        console.log('🔄 Updating phone number in Stytch...');
+        
+        // Get user's Stytch ID
+        const UserMappingService = (await import('../services/userMappingService.js')).default;
+        const user = await UserMappingService.getUserById(userId);
+        
+        if (!user || !user.stytch_user_id) {
+          throw new Error('User not found or missing Stytch ID');
+        }
+        
+        // Update phone number in Stytch
+        await stytchClient.users.update({
+          user_id: user.stytch_user_id,
+          phone_number: session.newPhoneNumber
+        });
+        
+        // Update phone number in Supabase
+        console.log('💾 Updating phone number in Supabase...');
+        await UserMappingService.updateUserPhone(userId, session.newPhoneNumber);
+        
+        // Log activity
+        const { logUserActivity } = await import('../services/activityService.js');
+        await logUserActivity(
+          userId,
+          `Phone number changed from ${session.currentPhoneNumber} to ${session.newPhoneNumber}`,
+          'phone_change',
+          {
+            old_phone: session.currentPhoneNumber,
+            new_phone: session.newPhoneNumber,
+            session_id: sessionId
+          }
+        );
+        
+        // Clean up session
+        this.phoneChangeSessions.delete(sessionId);
+        
+        console.log('🎉 Phone change completed successfully');
+        
+        return {
+          success: true,
+          oldPhoneNumber: session.currentPhoneNumber,
+          newPhoneNumber: session.newPhoneNumber,
+          changedAt: new Date().toISOString(),
+          message: 'Phone number changed successfully'
+        };
+        
+      } catch (error) {
+        // Increment attempts
+        session.newPhoneAttempts++;
+        this.phoneChangeSessions.set(sessionId, session);
+        
+        throw new Error(`New phone OTP verification failed: ${error.message}`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Phone change completion error:', error);
+      throw new Error(`Phone change completion failed: ${error.message}`);
     }
   }
 }

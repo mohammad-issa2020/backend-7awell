@@ -1,52 +1,12 @@
-// import web3AuthService from '../services/web3AuthService.js';
 import Wallet from '../models/Wallet.js';
 import BaseResponse from '../utils/baseResponse.js';
 import { logUserActivity } from '../services/activityService.js';
 
 /**
- * Wallet Controller to handle wallets and Web3Auth
+ * Wallet Controller to handle wallets
  */
 class WalletController {
-  /**
-   * Create JWT for Web3Auth authentication
-   * POST /wallets/auth/token
-   */
-  async createAuthToken(req, res) {
-    try {
-      const user = req.user;
 
-      // create custom JWT for user
-      // const customJWT = web3AuthService.createCustomJWT(user, user);
-
-      // log activity
-      await logUserActivity(
-        user.id,
-        'Web3Auth JWT created',
-        'auth_login',
-        // { verifier: web3AuthService.web3AuthVerifier }
-      );
-
-      return BaseResponse.success(
-        res,
-        {
-          token: customJWT,
-          // verifier: web3AuthService.web3AuthVerifier,
-          // clientId: web3AuthService.web3AuthClientId,
-          expiresIn: 24 * 60 * 60 // 24 hours in seconds
-        },
-        'Authentication token created successfully'
-      );
-    } catch (error) {
-      console.error('Create auth token error:', error);
-      return BaseResponse.error(
-        res,
-        'Failed to create authentication token',
-        500,
-        error.message,
-        'AUTH_TOKEN_CREATION_FAILED'
-      );
-    }
-  }
 
   /**
    * Create new wallet
@@ -84,16 +44,11 @@ class WalletController {
         userId,
         address,
         network,
-        provider: 'web3auth',
+        provider: 'manual',
         backupMethods
       });
 
-      // update user table
-      // await web3AuthService.createWallet(userId, {
-      //   address,
-      //   network,
-      //   provider: 'web3auth'
-      // });
+
 
       // log activity
       await logUserActivity(
@@ -103,7 +58,7 @@ class WalletController {
         {
           wallet_address: address,
           network,
-          provider: 'web3auth'
+          provider: 'manual'
         }
       );
 
@@ -452,32 +407,7 @@ class WalletController {
     }
   }
 
-  /**
-   * Get Web3Auth settings
-   * GET /wallets/config
-   */
-  async getClientConfig(req, res) {
-    try {
-      const { network = 'ethereum' } = req.query;
 
-      // const config = web3AuthService.getClientConfig(network);
-
-      return BaseResponse.success(
-        res,
-        { config },
-        'Client configuration retrieved successfully'
-      );
-    } catch (error) {
-      console.error('Get client config error:', error);
-      return BaseResponse.error(
-        res,
-        'Failed to get client configuration',
-        500,
-        error.message,
-        'GET_CONFIG_FAILED'
-      );
-    }
-  }
 
   /**
     * Create recovery link
@@ -738,12 +668,7 @@ class WalletController {
         updated_at: new Date().toISOString()
       });
 
-      // update user table
-      // await web3AuthService.createWallet(userId, {
-      //   address: address.toLowerCase(),
-      //   network: wallet.network,
-      //   provider: wallet.provider
-      // });
+
 
       // log activity
       await logUserActivity(
@@ -777,29 +702,7 @@ class WalletController {
     }
   }
 
-  /**
-   * Check Web3Auth configuration status
-   * GET /api/v1/wallets/web3auth/status
-   */
-  async getWeb3AuthStatus(req, res) {
-    try {
-      // const status = web3AuthService.getConfigurationStatus();
-      
-      return BaseResponse.success(
-        res,
-        status,
-        'Web3Auth configuration status retrieved successfully'
-      );
-    } catch (error) {
-      return BaseResponse.error(
-        res,
-        'Failed to get Web3Auth status',
-        500,
-        error.message,
-        'WEB3AUTH_STATUS_FAILED'
-      );
-    }
-  }
+
 }
 
 export default new WalletController();

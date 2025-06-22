@@ -25,9 +25,16 @@ router.get('/', (req, res) => {
       debugOtp: '/api/debug-otp',
       auth: {
         checkAvailability: 'GET /api/v1/auth/check-availability',
-        sendOTP: 'POST /api/v1/auth/otp/send',
-        verifyOTP: 'POST /api/v1/auth/otp/verify',
-        login: 'POST /api/v1/auth/login',
+        // Sequential Authentication Flow (phone first, then email)
+        startPhoneLogin: 'POST /api/v1/auth/login/phone',
+        verifyPhoneOTP: 'POST /api/v1/auth/login/phone/verify',
+        startEmailLogin: 'POST /api/v1/auth/login/email',
+        verifyEmailOTP: 'POST /api/v1/auth/login/email/verify',
+        // Phone Change Operations (Protected)
+        startPhoneChange: 'POST /api/v1/auth/phone/change/start',
+        verifyOldPhoneOTP: 'POST /api/v1/auth/phone/change/verify-old',
+        verifyNewPhoneOTP: 'POST /api/v1/auth/phone/change/verify-new',
+        // Session Management
         refresh: 'POST /api/v1/auth/refresh',
         logout: 'POST /api/v1/auth/logout',
         me: 'GET /api/v1/auth/me',
@@ -94,8 +101,6 @@ router.get('/', (req, res) => {
         createPhoneMapping: 'POST /api/v1/contacts/phone-mapping'
       },
       wallets: {
-        createAuthToken: 'POST /api/v1/wallets/auth/token',
-        getConfig: 'GET /api/v1/wallets/config?network={network}',
         getStatus: 'GET /api/v1/wallets/status',
         getStats: 'GET /api/v1/wallets/stats',
         getPrimary: 'GET /api/v1/wallets/primary',
@@ -123,7 +128,8 @@ router.get('/', (req, res) => {
     },
     documentation: 'Check the README.md for complete API documentation',
     features: [
-      'Stytch-based authentication',
+      'Sequential authentication (phone first, then email)',
+      'Phone change operations with dual OTP verification',
       'Admin authentication with JWT',
       'OTP verification via Stytch (SMS, WhatsApp, Email)',
       'Session management via Stytch',
@@ -139,7 +145,6 @@ router.get('/', (req, res) => {
       'Contact synchronization with privacy-preserving phone hashing',
       'Contact favorites and interaction tracking',
       'Contact search and discovery',
-      'Web3Auth integration for blockchain wallets',
       'Multi-network wallet support (Ethereum, Polygon)',
       'Secure wallet management and backup systems',
       'Wallet transaction tracking and recovery',

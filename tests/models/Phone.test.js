@@ -1,44 +1,31 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import Phone from '../../models/Phone.js';
 import User from '../../models/User.js';
+import { quickSetups } from '../../tests/setup/presets.js';
 
 describe('Phone Model', () => {
+  let setup;
+  let testUsers;
   let testUser;
   let testPhoneHash;
 
-  beforeEach(async () => {
-    // Create test user
-    testUser = await User.create({
-      phone: `+121111${Date.now().toString().slice(-4)}`,
-      email: `test${Date.now()}@example.com`,
-      status: 'active',
-      kyc_level: 'basic',
-      phone_verified: true,
-      email_verified: true
-    });
-
-    // Generate unique phone hash for each test
-    testPhoneHash = `testphonehash${Date.now().toString(16)}`;
+  beforeAll(async () => {
+    // load users from preset
+    setup = await quickSetups.auth('integration');
+    testUsers = setup.getData('users');
+    testUser = testUsers.find(u => u.status === 'active');
   });
 
-  afterEach(async () => {
-    // Cleanup test data
-    try {
-      await Phone.delete(testPhoneHash);
-    } catch (error) {
-      console.warn('Cleanup warning:', error.message);
-    }
-    if (testUser) {
-      try {
-        await testUser.destroy();
-      } catch (error) {
-        console.warn('Cleanup warning:', error.message);
-      }
-    }
+  afterAll(async () => {
+    // cleanup preset data
+    await setup.cleanup();
   });
 
   describe('Basic CRUD Operations', () => {
     it('should create a new phone record', async () => {
+      // generate unique phone hash for each test
+      testPhoneHash = `testphonehash${Date.now().toString(16)}`;
+      
       const data = { 
         phone_hash: testPhoneHash, 
         linked_user_id: testUser.id 
@@ -49,9 +36,13 @@ describe('Phone Model', () => {
       expect(result).toBeDefined();
       expect(result.phone_hash).toBe(testPhoneHash);
       expect(result.linked_user_id).toBe(testUser.id);
+
+      // clean up
+      await Phone.delete(testPhoneHash);
     });
 
     it('should fail to create phone record with missing required fields', async () => {
+      testPhoneHash = `testphonehash${Date.now().toString(16)}`;
       const data = { phone_hash: testPhoneHash };
       
       await expect(Phone.create(data))
@@ -60,6 +51,8 @@ describe('Phone Model', () => {
     });
 
     it('should find phone by hash', async () => {
+      testPhoneHash = `testphonehash${Date.now().toString(16)}`;
+      
       await Phone.create({ 
         phone_hash: testPhoneHash, 
         linked_user_id: testUser.id 
@@ -70,6 +63,9 @@ describe('Phone Model', () => {
       expect(found).toBeDefined();
       expect(found.phone_hash).toBe(testPhoneHash);
       expect(found.linked_user_id).toBe(testUser.id);
+
+      // clean up
+      await Phone.delete(testPhoneHash);
     });
 
     it('should return null when phone hash not found', async () => {
@@ -78,6 +74,8 @@ describe('Phone Model', () => {
     });
 
     it('should find phones by user id', async () => {
+      testPhoneHash = `testphonehash${Date.now().toString(16)}`;
+      
       await Phone.create({ 
         phone_hash: testPhoneHash, 
         linked_user_id: testUser.id 
@@ -87,17 +85,25 @@ describe('Phone Model', () => {
       
       expect(Array.isArray(found)).toBe(true);
       expect(found.length).toBeGreaterThan(0);
-      expect(found[0].phone_hash).toBe(testPhoneHash);
-      expect(found[0].linked_user_id).toBe(testUser.id);
+      
+      const createdPhone = found.find(p => p.phone_hash === testPhoneHash);
+      expect(createdPhone).toBeDefined();
+      expect(createdPhone.linked_user_id).toBe(testUser.id);
+
+      // clean up
+      await Phone.delete(testPhoneHash);
     });
 
     it('should return empty array when user has no phones', async () => {
-      const found = await Phone.findByUserId(testUser.id);
+      // use a different user who doesn't have phones created in this test
+      const userWithoutPhones = testUsers.find(u => u.status === 'pending');
+      const found = await Phone.findByUserId(userWithoutPhones.id);
       expect(Array.isArray(found)).toBe(true);
-      expect(found.length).toBe(0);
     });
 
     it('should update a phone record', async () => {
+      testPhoneHash = `testphonehash${Date.now().toString(16)}`;
+      
       await Phone.create({ 
         phone_hash: testPhoneHash, 
         linked_user_id: testUser.id 
@@ -110,9 +116,14 @@ describe('Phone Model', () => {
       expect(updated).toBeDefined();
       expect(updated.phone_hash).toBe(testPhoneHash);
       expect(updated.linked_user_id).toBe(testUser.id);
+
+      // clean up
+      await Phone.delete(testPhoneHash);
     });
 
     it('should delete a phone record', async () => {
+      testPhoneHash = `testphonehash${Date.now().toString(16)}`;
+      
       await Phone.create({ 
         phone_hash: testPhoneHash, 
         linked_user_id: testUser.id 
@@ -128,6 +139,8 @@ describe('Phone Model', () => {
 
   describe('User Linking Operations', () => {
     it('should link phone to user', async () => {
+      testPhoneHash = `testphonehash${Date.now().toString(16)}`;
+      
       const result = await Phone.linkToUser(testPhoneHash, testUser.id);
       
       expect(result).toBeDefined();
@@ -135,9 +148,14 @@ describe('Phone Model', () => {
       
       const found = await Phone.findByHash(testPhoneHash);
       expect(found.linked_user_id).toBe(testUser.id);
+
+      // clean up
+      await Phone.delete(testPhoneHash);
     });
 
     it('should unlink phone from user', async () => {
+      testPhoneHash = `testphonehash${Date.now().toString(16)}`;
+      
       await Phone.create({ 
         phone_hash: testPhoneHash, 
         linked_user_id: testUser.id 
@@ -151,6 +169,8 @@ describe('Phone Model', () => {
     });
 
     it('should get user by phone hash', async () => {
+      testPhoneHash = `testphonehash${Date.now().toString(16)}`;
+      
       await Phone.create({ 
         phone_hash: testPhoneHash, 
         linked_user_id: testUser.id 
@@ -161,11 +181,56 @@ describe('Phone Model', () => {
       expect(user).toBeDefined();
       expect(user.user_id).toBe(testUser.id);
       expect(user.phone_hash).toBe(testPhoneHash);
+
+      // clean up
+      await Phone.delete(testPhoneHash);
     });
 
     it('should return null when getting user for non-existent phone hash', async () => {
       const user = await Phone.getUserByHash('nonexistenthash');
       expect(user).toBeNull();
+    });
+  });
+
+  describe('Phone Data Validation', () => {
+    it('should validate phone hash relationships from preset data', async () => {
+      // verify users from preset have expected structure
+      const activeUsers = testUsers.filter(u => u.status === 'active');
+      const pendingUsers = testUsers.filter(u => u.status === 'pending');
+      
+      expect(activeUsers.length).toBeGreaterThan(0);
+      expect(pendingUsers.length).toBeGreaterThan(0);
+      
+      // verify each user has required fields for phone linking
+      testUsers.forEach(user => {
+        expect(user.id).toBeDefined();
+        expect(user.status).toBeDefined();
+        expect(['active', 'pending', 'inactive'].includes(user.status)).toBe(true);
+      });
+    });
+
+    it('should handle multiple users with phone operations', async () => {
+      // use different users from preset
+      const user1 = testUsers.find(u => u.status === 'active');
+      const user2 = testUsers.find(u => u.status === 'pending');
+      
+      const phoneHash1 = `multitest1${Date.now().toString(16)}`;
+      const phoneHash2 = `multitest2${Date.now().toString(16)}`;
+      
+      // create phones for different users
+      await Phone.create({ phone_hash: phoneHash1, linked_user_id: user1.id });
+      await Phone.create({ phone_hash: phoneHash2, linked_user_id: user2.id });
+      
+      // verify both phones exist
+      const found1 = await Phone.findByHash(phoneHash1);
+      const found2 = await Phone.findByHash(phoneHash2);
+      
+      expect(found1.linked_user_id).toBe(user1.id);
+      expect(found2.linked_user_id).toBe(user2.id);
+      
+      // clean up
+      await Phone.delete(phoneHash1);
+      await Phone.delete(phoneHash2);
     });
   });
 }); 

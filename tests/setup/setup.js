@@ -1,6 +1,6 @@
-import { beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import dotenv from 'dotenv';
-import { supabaseAdmin } from '../database/supabase.js';
+import { supabaseAdmin } from '../../database/supabase.js';
 
 // Load environment variables for testing
 dotenv.config({ path: '.env.test' });
@@ -17,16 +17,20 @@ const mockStytchClient = {
   otps: {
     sms: {
       send: vi.fn(),
-      authenticate: vi.fn()
+      authenticate: vi.fn(),
+      loginOrCreate: vi.fn()
     },
     whatsapp: {
       send: vi.fn(),
-      authenticate: vi.fn()
+      authenticate: vi.fn(),
+      loginOrCreate: vi.fn()
     },
     email: {
       send: vi.fn(),
-      authenticate: vi.fn()
-    }
+      authenticate: vi.fn(),
+      loginOrCreate: vi.fn()
+    },
+    authenticate: vi.fn()
   },
   sessions: {
     get: vi.fn(),
@@ -37,10 +41,33 @@ const mockStytchClient = {
   magicLinks: {
     email: {
       send: vi.fn(),
-      authenticate: vi.fn()
+      authenticate: vi.fn(),
+      loginOrCreate: vi.fn()
     }
+  },
+  verificationSessions: {
+    create: vi.fn(),
+    get: vi.fn(),
+    complete: vi.fn()
   }
 };
+
+// Mock Stytch config module globally
+vi.mock('../../config/stytch.js', () => ({
+  default: mockStytchClient
+}));
+
+// Mock SolanaService
+vi.mock('../../services/solanaService', () => ({
+  default: {
+    initializeFeePayerWallet: vi.fn(),
+    createWallet: vi.fn(),
+    getBalance: vi.fn(),
+    transfer: vi.fn()
+  }
+}));
+
+
 
 // Mock Winston logger to avoid console spam during tests
 const mockLogger = {
@@ -51,6 +78,11 @@ const mockLogger = {
   verbose: vi.fn()
 };
 
+// Mock logger globally
+vi.mock('../../utils/logger', () => ({
+  default: mockLogger
+}));
+
 // Global test setup
 beforeAll(async () => {
   // Set test environment variables
@@ -59,15 +91,6 @@ beforeAll(async () => {
   process.env.STYTCH_PROJECT_ID = 'test-project-id';
   process.env.STYTCH_SECRET = 'test-secret';
   process.env.PORT = '0'; // Use random port for testing
-  
-  // Mock modules
-  vi.mock('../config/stytch', () => ({
-    default: mockStytchClient
-  }));
-  
-  vi.mock('../utils/logger', () => ({
-    default: mockLogger
-  }));
 
   // Clean up Supabase tables
   await supabaseAdmin.from('wallets').delete().neq('id', 0);

@@ -25,6 +25,17 @@ const syncContactsSchema = Joi.object({
     .messages({
       'number.base': 'deviceContactsCount must be a number',
       'number.positive': 'deviceContactsCount must be positive'
+    }),
+  batchSize: Joi.number()
+    .integer()
+    .min(100)
+    .max(1000)
+    .optional()
+    .messages({
+      'number.base': 'batchSize must be a number',
+      'number.integer': 'batchSize must be an integer',
+      'number.min': 'batchSize must be at least 100',
+      'number.max': 'batchSize cannot exceed 1000'
     })
 });
 
@@ -66,13 +77,40 @@ router.use(authenticateToken);
 
 /**
  * @route   POST /api/v1/contacts/sync
- * @desc    Sync user contacts with the platform
+ * @desc    Sync user contacts with the platform (optimized batch processing)
  * @access  Private
- * @body    { phoneNumbers: string[], deviceContactsCount: number }
+ * @body    { phoneNumbers: string[], deviceContactsCount: number, batchSize?: number }
  */
 router.post('/sync', 
   validateBody(syncContactsSchema),
   contactController.syncContacts
+);
+
+/**
+ * @route   POST /api/v1/contacts/sync/estimate
+ * @desc    Estimate contact sync performance
+ * @access  Private
+ * @body    { contactCount: number, batchSize?: number }
+ */
+router.post('/sync/estimate',
+  validateBody(Joi.object({
+    contactCount: Joi.number().integer().min(1).max(10000).required(),
+    batchSize: Joi.number().integer().min(100).max(1000).optional()
+  })),
+  contactController.estimateSyncPerformance
+);
+
+/**
+ * @route   GET /api/v1/contacts/sync/statistics
+ * @desc    Get contact sync statistics
+ * @access  Private
+ * @query   { days?: number }
+ */
+router.get('/sync/statistics',
+  validateQuery(Joi.object({
+    days: Joi.number().integer().min(1).max(365).default(30)
+  })),
+  contactController.getSyncStatistics
 );
 
 /**
@@ -146,6 +184,27 @@ router.post('/interaction',
 router.post('/phone-mapping', 
   validateBody(createPhoneMappingSchema),
   contactController.createPhoneMapping
+);
+
+/**
+ * @route   POST /api/v1/contacts/bulk-insert
+ * @desc    Bulk insert contacts (admin/testing)
+ * @access  Private
+ * @body    { contacts: object[], batchSize?: number }
+ */
+router.post('/bulk-insert',
+  validateBody(Joi.object({
+    contacts: Joi.array().items(
+      Joi.object({
+        owner_id: Joi.string().uuid().optional(),
+        phone_hash: Joi.string().required(),
+        is_favorite: Joi.boolean().default(false),
+        linked_user_id: Joi.string().uuid().allow(null).optional()
+      })
+    ).min(1).max(10000).required(),
+    batchSize: Joi.number().integer().min(100).max(1000).optional()
+  })),
+  contactController.bulkInsertContacts
 );
 
 export default router; 

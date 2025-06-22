@@ -13,7 +13,7 @@ const router = express.Router();
 // Rate limiting for transaction reading (lenient)
 const transactionReadRateLimit = rateLimiter.createLimiter({
   windowMs: 60 * 1000, // 1 minute
-  max: 100, // 100 read requests per minute
+  max: process.env.NODE_ENV === 'test' ? 1000 : 100, // Higher limit for tests
   keyGenerator: (req) => `transactions_read:${req.user?.id || req.ip}`,
   message: {
     status: 'ERROR',
@@ -25,7 +25,7 @@ const transactionReadRateLimit = rateLimiter.createLimiter({
 // Rate limiting for transaction writing (more restrictive)
 const transactionWriteRateLimit = rateLimiter.createLimiter({
   windowMs: 60 * 1000, // 1 minute
-  max: 30, // 30 write requests per minute
+  max: process.env.NODE_ENV === 'test' ? 1000 : 30, // Higher limit for tests
   keyGenerator: (req) => `transactions_write:${req.user?.id || req.ip}`,
   message: {
     status: 'ERROR',

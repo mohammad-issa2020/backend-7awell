@@ -165,7 +165,7 @@ export const expectValidTransaction = (transaction) => {
   expect(transaction.created_at).toBeDefined();
   
   // Validate transaction types
-  const validTypes = ['send', 'receive', 'buy', 'sell', 'swap', 'stake', 'unstake', 'reward'];
+  const validTypes = ['transfer', 'payment', 'cash_out', 'cash_in', 'exchange'];
   expect(validTypes).toContain(transaction.type);
   
   // Validate status
