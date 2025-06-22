@@ -797,14 +797,13 @@ class AuthService {
           });
           stytchUser = createResult.user;
         } else {
-          // Find existing user
-          console.log('🔍 Finding existing Stytch user...');
+          // Find existing user - only search by phone since email search is not supported
+          console.log('🔍 Finding existing Stytch user by phone...');
           const searchResult = await stytchClient.users.search({
             query: {
-              operator: 'OR',
+              operator: 'AND',
               operands: [
-                { filter_name: 'phone', filter_value: [session.phoneNumber] },
-                { filter_name: 'email', filter_value: [session.email] }
+                { filter_name: 'phone_number', filter_value: [session.phoneNumber] }
               ]
             }
           });
@@ -812,7 +811,13 @@ class AuthService {
           if (searchResult.results?.length > 0) {
             stytchUser = searchResult.results[0];
           } else {
-            throw new Error('User not found');
+            // If not found by phone, try to create the user
+            console.log('👤 User not found by phone, creating new user...');
+            const createResult = await stytchClient.users.create({
+              phone_number: session.phoneNumber,
+              email: session.email
+            });
+            stytchUser = createResult.user;
           }
         }
         
