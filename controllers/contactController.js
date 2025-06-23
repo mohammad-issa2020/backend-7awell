@@ -82,11 +82,18 @@ class ContactController {
       // Extract phone hashes from the contact hashes array
       const phoneHashes = contactHashes.map(contact => contact.phoneHash);
 
-      // Estimate performance before sync
-      const performanceEstimate = await ContactsWithAccounts.estimateSyncPerformance(
-        phoneHashes.length,
-        batchSize
-      );
+      // Estimate performance before sync (optional)
+      let performanceEstimate = null;
+      try {
+        if (typeof ContactsWithAccounts.estimateSyncPerformance === 'function') {
+          performanceEstimate = await ContactsWithAccounts.estimateSyncPerformance(
+            phoneHashes.length,
+            batchSize
+          );
+        }
+      } catch (error) {
+        console.log('Performance estimation not available, continuing without it');
+      }
 
       const result = await ContactsWithAccounts.syncContacts(
         userId, 

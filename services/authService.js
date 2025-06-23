@@ -876,7 +876,7 @@ class AuthService {
           // For now, we'll create a custom session since Stytch sessions.create is not available
           const sessionToken = `stytch_session_${session.stytchUser.user_id}_${Date.now()}`;
           const sessionJwt = Buffer.from(JSON.stringify({
-            user_id: session.stytchUser.user_id,
+          user_id: session.stytchUser.user_id,
             phone: session.phoneNumber,
             email: session.email,
             created_at: session.stytchUser.created_at,

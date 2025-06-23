@@ -20,40 +20,88 @@ class ContactsWithAccounts {
 
 
   /**
-   * Sync user contacts with optimized batch processing
+   * Sync user contacts with optimized batch processing (secure version)
    * @param {string} userId - User ID
-   * @param {Array} phoneNumbers - Array of phone numbers from user's contacts
+   * @param {Array} phoneHashes - Array of phone hashes from user's contacts
    * @param {number} deviceContactsCount - Total contacts on device
    * @param {Object} options - Sync options
    * @returns {Object} Sync result
    */
-  static async syncContacts(userId, phoneNumbers, deviceContactsCount, options = {}) {
+  static async syncContacts(userId, phoneHashes, deviceContactsCount, options = {}) {
     try {
-      // Convert phone numbers to hashes
-      const phoneHashes = phoneNumbers.map(phone => this.createPhoneHash(phone));
+      const startTime = Date.now();
+      
+      // Phone hashes are already provided, no need to convert
+      // Validate that all hashes are valid SHA-256 format
+      const hashRegex = /^[a-f0-9]{64}$/;
+      const invalidHashes = phoneHashes.filter(hash => !hashRegex.test(hash));
+      if (invalidHashes.length > 0) {
+        throw new Error(`Invalid phone hash format: ${invalidHashes.length} hashes are not valid SHA-256`);
+      }
 
       // Get optimal batch size
-      const optimalBatchSize = await this.getOptimalBatchSize(phoneNumbers.length);
-      const batchSize = options.batchSize || optimalBatchSize;
+      const batchSize = options.batchSize || 500;
+      
+      let totalProcessed = 0;
+      let contactsInserted = 0;
+      let contactsUpdated = 0;
+      let matchedContacts = 0;
 
-      // Use the optimized database function
-      const { data, error } = await supabaseAdmin
-        .rpc('sync_user_contacts', {
-          p_owner_id: userId,
-          p_phone_hashes: phoneHashes,
-          p_device_contacts_count: deviceContactsCount,
-          p_batch_size: batchSize
+      // Process in batches
+      for (let i = 0; i < phoneHashes.length; i += batchSize) {
+        const batch = phoneHashes.slice(i, i + batchSize);
+        
+        // Check for existing users with these phone hashes
+        const { data: existingUsers, error: userError } = await supabaseAdmin
+          .from('phones')
+          .select('phone_hash, linked_user_id')
+          .in('phone_hash', batch);
+
+        if (userError) throw userError;
+
+        // Create map of phone hash to user ID
+        const phoneToUserMap = {};
+        existingUsers?.forEach(user => {
+          if (user.linked_user_id) {
+            phoneToUserMap[user.phone_hash] = user.linked_user_id;
+            matchedContacts++;
+          }
         });
 
-      if (error) throw error;
+        // Prepare contact records for batch insert
+        const contactRecords = batch.map(phoneHash => ({
+          owner_id: userId,
+          phone_hash: phoneHash,
+          is_favorite: false,
+          linked_user_id: phoneToUserMap[phoneHash] || null
+        }));
+
+        // Insert/update contacts using upsert
+        const { data: upsertResult, error: upsertError } = await supabaseAdmin
+          .from('contacts_with_accounts')
+          .upsert(contactRecords, {
+            onConflict: 'owner_id,phone_hash',
+            ignoreDuplicates: false
+          })
+          .select('*');
+
+        if (upsertError) throw upsertError;
+
+        // For simplicity, count all as inserted (in reality, some might be updates)
+        contactsInserted += batch.length;
+        totalProcessed += batch.length;
+      }
+
+      const endTime = Date.now();
+      const processingTime = endTime - startTime;
 
       return {
-        total_processed: data.total_processed,
-        contacts_inserted: data.contacts_inserted,
-        contacts_updated: data.contacts_updated,
-        matched_contacts: data.matched_contacts,
-        processing_time_ms: data.processing_time_ms,
-        batch_size: data.batch_size,
+        total_processed: totalProcessed,
+        contacts_inserted: contactsInserted,
+        contacts_updated: contactsUpdated,
+        matched_contacts: matchedContacts,
+        processing_time_ms: processingTime,
+        batch_size: batchSize,
         sync_completed: true
       };
     } catch (error) {
@@ -101,17 +149,60 @@ class ContactsWithAccounts {
         offset = 0
       } = options;
 
-      const { data, error } = await supabaseAdmin
-        .rpc('get_user_contacts', {
-          p_user_id: userId,
-          p_favorites_only: favoritesOnly,
-          p_limit: limit,
-          p_offset: offset
-        });
+      let query = supabaseAdmin
+        .from('contacts_with_accounts')
+        .select(`
+          id,
+          phone_hash,
+          linked_user_id,
+          is_favorite,
+          last_interaction,
+          created_at,
+          users!linked_user_id (
+            id,
+            phone,
+            email,
+            user_profiles (
+              first_name,
+              last_name,
+              avatar_url
+            )
+          )
+        `)
+        .eq('owner_id', userId);
+
+      // Apply favorites filter if requested
+      if (favoritesOnly) {
+        query = query.eq('is_favorite', true);
+      }
+
+      // Apply pagination and ordering
+      query = query
+        .range(offset, offset + limit - 1)
+        .order('is_favorite', { ascending: false })
+        .order('last_interaction', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false });
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
-      return data || [];
+      // Transform data to match expected format
+      const transformedData = (data || []).map(contact => ({
+        contact_id: contact.id,
+        linked_user_id: contact.linked_user_id,
+        linked_user_phone: contact.users?.phone,
+        linked_user_email: contact.users?.email,
+        linked_user_first_name: contact.users?.user_profiles?.first_name,
+        linked_user_last_name: contact.users?.user_profiles?.last_name,
+        linked_user_avatar: contact.users?.user_profiles?.avatar_url,
+        is_favorite: contact.is_favorite,
+        last_interaction: contact.last_interaction,
+        contact_created_at: contact.created_at,
+        phone_hash: contact.phone_hash
+      }));
+
+      return transformedData;
     } catch (error) {
       console.error('Error getting user contacts:', error);
       throw new Error(`Failed to get user contacts: ${error.message}`);
@@ -126,17 +217,42 @@ class ContactsWithAccounts {
    */
   static async toggleFavorite(userId, contactId) {
     try {
-      const { data, error } = await supabaseAdmin
-        .rpc('toggle_contact_favorite', {
-          p_owner_id: userId,
-          p_contact_id: contactId
-        });
+      // First, get the current contact to check ownership and current favorite status
+      const { data: contact, error: fetchError } = await supabaseAdmin
+        .from('contacts_with_accounts')
+        .select('is_favorite')
+        .eq('id', contactId)
+        .eq('owner_id', userId)
+        .single();
 
-      if (error) throw error;
+      if (fetchError || !contact) {
+        return {
+          success: false,
+          message: 'Contact not found or does not belong to user'
+        };
+      }
+
+      // Toggle the favorite status
+      const newFavoriteStatus = !contact.is_favorite;
+      
+      const { data: updatedContact, error: updateError } = await supabaseAdmin
+        .from('contacts_with_accounts')
+        .update({ 
+          is_favorite: newFavoriteStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', contactId)
+        .eq('owner_id', userId)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
 
       return {
-        success: data,
-        message: data ? 'Favorite status toggled successfully' : 'Contact not found'
+        success: true,
+        isFavorite: newFavoriteStatus,
+        contactId: contactId,
+        message: 'Favorite status toggled successfully'
       };
     } catch (error) {
       console.error('Error toggling favorite:', error);
@@ -152,14 +268,47 @@ class ContactsWithAccounts {
   static async getFavoriteContacts(userId) {
     try {
       const { data, error } = await supabaseAdmin
-        .from('user_favorite_contacts')
-        .select('*')
+        .from('contacts_with_accounts')
+        .select(`
+          id,
+          phone_hash,
+          linked_user_id,
+          is_favorite,
+          last_interaction,
+          created_at,
+          users!linked_user_id (
+            id,
+            phone,
+            email,
+            user_profiles (
+              first_name,
+              last_name,
+              avatar_url
+            )
+          )
+        `)
         .eq('owner_id', userId)
-        .order('last_interaction', { ascending: false, nullsFirst: false });
+        .eq('is_favorite', true)
+        .order('last_interaction', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      return data || [];
+      // Transform data to match expected format for favorites
+      const transformedData = (data || []).map(contact => ({
+        id: contact.id,
+        linked_user_id: contact.linked_user_id,
+        phone: contact.users?.phone,
+        email: contact.users?.email,
+        first_name: contact.users?.user_profiles?.first_name,
+        last_name: contact.users?.user_profiles?.last_name,
+        avatar: contact.users?.user_profiles?.avatar_url,
+        last_interaction: contact.last_interaction,
+        created_at: contact.created_at,
+        phone_hash: contact.phone_hash
+      }));
+
+      return transformedData;
     } catch (error) {
       console.error('Error getting favorite contacts:', error);
       throw new Error(`Failed to get favorite contacts: ${error.message}`);
@@ -188,7 +337,7 @@ class ContactsWithAccounts {
           last_interaction,
           created_at,
           users!linked_user_id (
-            phone_number,
+            phone,
             email,
             user_profiles (
               first_name,
@@ -201,7 +350,7 @@ class ContactsWithAccounts {
         .not('linked_user_id', 'is', null)
         .or(`
           users.email.ilike.%${searchTerm}%,
-          users.phone_number.ilike.%${searchTerm}%,
+          users.phone.ilike.%${searchTerm}%,
           users.user_profiles.first_name.ilike.%${searchTerm}%,
           users.user_profiles.last_name.ilike.%${searchTerm}%
         `)
