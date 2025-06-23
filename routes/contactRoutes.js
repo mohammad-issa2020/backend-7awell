@@ -3,7 +3,7 @@ import contactController from '../controllers/contactController.js';
 import { authenticateToken } from '../middleware/authMiddleware.js';
 import { validateBody, validateQuery } from '../middleware/validation.js';
 import {
-  syncContacts as syncContactsSchema,
+  syncSecure as syncContactsSchema,
   getContacts as getContactsSchema,
   searchContacts as searchContactsSchema
 } from '../schemas/contactSchemas.js';
@@ -18,7 +18,7 @@ router.use(authenticateToken);
 // ============================================================================
 
 /**
- * Sync user contacts with optimized batch processing
+ * Sync user contacts with secure hashed phone numbers
  * @route POST /api/v1/contacts/sync
  * @access Private
  */

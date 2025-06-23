@@ -4,21 +4,22 @@ import { logUserActivity } from '../services/activityService.js';
 
 class ContactController {
   /**
-   * Sync user contacts
+   * Sync user contacts with secure hashed phone numbers
    * POST /contacts/sync
    */
   async syncContacts(req, res) {
     try {
-      const { phoneNumbers, deviceContactsCount, batchSize } = req.body;
+      const { contactHashes, deviceContactsCount, hashingMethod, timestamp, batchSize } = req.body;
       const userId = req.user.id;
 
-      if (!Array.isArray(phoneNumbers)) {
+      // Validate required fields
+      if (!Array.isArray(contactHashes)) {
         return BaseResponse.error(
           res,
           'Invalid request',
           400,
-          'phoneNumbers must be an array',
-          'INVALID_PHONE_NUMBERS'
+          'contactHashes must be an array',
+          'INVALID_CONTACT_HASHES'
         );
       }
 
@@ -32,8 +33,43 @@ class ContactController {
         );
       }
 
-      // Validate phone numbers array
-      if (phoneNumbers.length > 10000) {
+      // Validate hashing method
+      if (hashingMethod !== 'SHA256') {
+        return BaseResponse.error(
+          res,
+          'Invalid hashing method',
+          400,
+          'Only SHA256 hashing method is supported',
+          'INVALID_HASHING_METHOD'
+        );
+      }
+
+      // Validate timestamp
+      if (!timestamp || isNaN(Date.parse(timestamp))) {
+        return BaseResponse.error(
+          res,
+          'Invalid timestamp',
+          400,
+          'Valid ISO datetime string required',
+          'INVALID_TIMESTAMP'
+        );
+      }
+
+      // Validate contact hashes format
+      const hashRegex = /^[a-f0-9]{64}$/;
+      const invalidHashes = contactHashes.filter(hash => !hashRegex.test(hash.phoneHash));
+      if (invalidHashes.length > 0) {
+        return BaseResponse.error(
+          res,
+          'Invalid hash format',
+          400,
+          'Phone hashes must be 64-character lowercase hex strings',
+          'INVALID_HASH_FORMAT'
+        );
+      }
+
+      // Validate array size
+      if (contactHashes.length > 10000) {
         return BaseResponse.error(
           res,
           'Too many contacts',
@@ -43,15 +79,18 @@ class ContactController {
         );
       }
 
+      // Extract phone hashes from the contact hashes array
+      const phoneHashes = contactHashes.map(contact => contact.phoneHash);
+
       // Estimate performance before sync
       const performanceEstimate = await ContactsWithAccounts.estimateSyncPerformance(
-        phoneNumbers.length,
+        phoneHashes.length,
         batchSize
       );
 
       const result = await ContactsWithAccounts.syncContacts(
         userId, 
-        phoneNumbers, 
+        phoneHashes, 
         deviceContactsCount,
         { batchSize }
       );
@@ -59,7 +98,7 @@ class ContactController {
       // Log the sync activity with performance metrics
       await logUserActivity(
         userId,
-        'Contact sync completed',
+        'Contact sync completed (secure)',
         'contact',
         {
           device_contacts: deviceContactsCount,
@@ -69,6 +108,7 @@ class ContactController {
           contacts_updated: result.contacts_updated,
           processing_time_ms: result.processing_time_ms,
           batch_size: result.batch_size,
+          hashing_method: hashingMethod,
           estimated_time_seconds: performanceEstimate?.estimated_time_seconds,
           actual_vs_estimated: performanceEstimate?.estimated_time_seconds ? 
             (result.processing_time_ms / 1000) / performanceEstimate.estimated_time_seconds : null
@@ -79,9 +119,14 @@ class ContactController {
         res,
         {
           ...result,
-          performance_estimate: performanceEstimate
+          performance_estimate: performanceEstimate,
+          security_info: {
+            hashing_method: hashingMethod,
+            hashes_processed: phoneHashes.length,
+            timestamp: timestamp
+          }
         },
-        'Contacts synced successfully'
+        'Contacts synced successfully using secure hashing'
       );
     } catch (error) {
       console.error('Contact sync error:', error);
