@@ -74,22 +74,24 @@ CREATE TRIGGER update_transactions_updated_at
     BEFORE UPDATE ON transactions 
     FOR EACH ROW 
     EXECUTE FUNCTION update_transactions_updated_at();
-
+-- edit this function to allow updating the status, updated_at, and completed_at
 CREATE OR REPLACE FUNCTION prevent_update_except_status()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF NEW.status IS DISTINCT FROM OLD.status THEN
-    -- Only status is allowed to change
-    -- Check if any other column is changed
-    IF row_to_json(NEW) - 'status' IS DISTINCT FROM row_to_json(OLD) - 'status' THEN
-      RAISE EXCEPTION 'Only status can be updated';
-    END IF;
-  ELSE
-    -- If status is not changed, prevent any update
-    IF row_to_json(NEW) IS DISTINCT FROM row_to_json(OLD) THEN
-      RAISE EXCEPTION 'Only status can be updated';
-    END IF;
+  IF (OLD.reference IS DISTINCT FROM NEW.reference OR
+      OLD.sender_id IS DISTINCT FROM NEW.sender_id OR
+      OLD.recipient_id IS DISTINCT FROM NEW.recipient_id OR
+      OLD.type IS DISTINCT FROM NEW.type OR
+      OLD.amount IS DISTINCT FROM NEW.amount OR
+      OLD.asset_symbol IS DISTINCT FROM NEW.asset_symbol OR
+      OLD.fee IS DISTINCT FROM NEW.fee OR
+      OLD.exchange_rate IS DISTINCT FROM NEW.exchange_rate OR
+      OLD.note IS DISTINCT FROM NEW.note OR
+      OLD.metadata IS DISTINCT FROM NEW.metadata OR
+      OLD.created_at IS DISTINCT FROM NEW.created_at) THEN
+    RAISE EXCEPTION 'Only status, updated_at, and completed_at can be updated';
   END IF;
+  
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -97,7 +99,7 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER only_status_update
 BEFORE UPDATE ON transactions
 FOR EACH ROW
-EXECUTE FUNCTION prevent_update_except_status(); 
+EXECUTE FUNCTION prevent_update_except_status();
 
 -- Add comments for documentation
 COMMENT ON TABLE transactions IS 'Main transactions table for all types of financial transactions';

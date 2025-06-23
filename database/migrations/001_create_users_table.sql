@@ -39,3 +39,30 @@ CREATE TRIGGER update_users_updated_at
 
 -- Add RLS (Row Level Security) policies
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+
+-- Create policies to allow service role to perform all operations
+-- This allows admin operations and testing
+CREATE POLICY "Allow service role full access" ON users 
+    FOR ALL 
+    TO service_role 
+    USING (true) 
+    WITH CHECK (true);
+
+-- Create policy to allow authenticated users to read their own data
+CREATE POLICY "Users can view own data" ON users 
+    FOR SELECT 
+    TO authenticated 
+    USING (id = auth.uid());
+
+-- Create policy to allow authenticated users to update their own data
+CREATE POLICY "Users can update own data" ON users 
+    FOR UPDATE 
+    TO authenticated 
+    USING (id = auth.uid()) 
+    WITH CHECK (id = auth.uid());
+
+-- Create policy for inserting new users (public access during registration)
+CREATE POLICY "Allow user creation" ON users 
+    FOR INSERT 
+    TO anon, authenticated 
+    WITH CHECK (true);

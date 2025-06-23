@@ -18,9 +18,21 @@ describe('NotificationSettings Model', () => {
     testUserId = testUser.id;
   });
 
+  beforeEach(async () => {
+    // Clean up any existing notification settings for testUserId before each test
+    try {
+      await NotificationSettings.destroy({ where: { user_id: testUserId } });
+    } catch (error) {
+      // Ignore cleanup errors (settings might not exist)
+      console.log('Test cleanup - no settings to clean for:', testUserId);
+    }
+  });
+
   afterAll(async () => {
     // cleanup preset data
-    await setup.cleanup();
+    if (setup && setup.cleanup) {
+      await setup.cleanup();
+    }
   });
 
   describe('Static Methods', () => {
@@ -360,23 +372,23 @@ describe('NotificationSettings Model', () => {
     it('should validate notification settings relationships from preset data', async () => {
       // verify users from preset have expected structure
       const activeUsers = testUsers.filter(u => u.status === 'active');
-      const pendingUsers = testUsers.filter(u => u.status === 'pending');
+      const suspendedUsers = testUsers.filter(u => u.status === 'suspended');
       
       expect(activeUsers.length).toBeGreaterThan(0);
-      expect(pendingUsers.length).toBeGreaterThan(0);
+      expect(suspendedUsers.length).toBeGreaterThan(0);
       
       // verify each user has required fields for notification settings
       testUsers.forEach(user => {
         expect(user.id).toBeDefined();
         expect(user.status).toBeDefined();
-        expect(['active', 'pending', 'inactive'].includes(user.status)).toBe(true);
+        expect(['active', 'suspended', 'deleted'].includes(user.status)).toBe(true);
       });
     });
 
     it('should handle multiple users with notification settings', async () => {
       // use different users from preset
       const user1 = testUsers.find(u => u.status === 'active');
-      const user2 = testUsers.find(u => u.status === 'pending');
+      const user2 = testUsers.find(u => u.status === 'suspended');
       
       // create notification settings for different users
       const settings1 = await NotificationSettings.create({
@@ -411,8 +423,8 @@ describe('NotificationSettings Model', () => {
         transaction_alerts: 1, // number that should be converted
         security_alerts: false,
         promotions: 0,
-        email_notifications: null,
-        sms_notifications: undefined
+        email_notifications: false, // can't be null due to NOT NULL constraint
+        sms_notifications: false    // can't be undefined due to NOT NULL constraint
       });
 
       // note: Supabase/PostgreSQL will handle type conversion
@@ -426,8 +438,10 @@ describe('NotificationSettings Model', () => {
     });
 
     it('should have proper timestamp format', async () => {
+      // Use a different user for this test to avoid conflicts
+      const timestampTestUser = testUsers.find(u => u.status === 'suspended');
       const settings = await NotificationSettings.create({
-        user_id: testUserId
+        user_id: timestampTestUser.id
       });
 
       expect(settings.updated_at).toBeDefined();
@@ -435,7 +449,7 @@ describe('NotificationSettings Model', () => {
       expect(new Date(settings.updated_at).getTime()).not.toBeNaN();
 
       // clean up
-      await NotificationSettings.destroy({ where: { user_id: testUserId } });
+      await NotificationSettings.destroy({ where: { user_id: timestampTestUser.id } });
     });
 
     it('should validate notification preference combinations', async () => {
@@ -482,23 +496,27 @@ describe('NotificationSettings Model', () => {
 
   describe('Edge Cases', () => {
     it('should handle empty update data', async () => {
+      // Use a different user to avoid conflicts
+      const emptyUpdateUser = testUsers.find(u => u.status === 'deleted') || testUsers[0];
       const settings = await NotificationSettings.create({
-        user_id: testUserId
+        user_id: emptyUpdateUser.id
       });
 
       const instance = new NotificationSettings(settings);
       const updatedSettings = await instance.update({});
 
       expect(updatedSettings).toBeDefined();
-      expect(updatedSettings.user_id).toBe(testUserId);
+      expect(updatedSettings.user_id).toBe(emptyUpdateUser.id);
 
       // clean up
-      await NotificationSettings.destroy({ where: { user_id: testUserId } });
+      await NotificationSettings.destroy({ where: { user_id: emptyUpdateUser.id } });
     });
 
     it('should handle partial updates', async () => {
+      // Use a different user to avoid conflicts
+      const partialUpdateUser = testUsers.find(u => u.status === 'suspended');
       const settings = await NotificationSettings.create({
-        user_id: testUserId,
+        user_id: partialUpdateUser.id,
         push_enabled: true,
         email_notifications: true
       });
@@ -513,7 +531,7 @@ describe('NotificationSettings Model', () => {
       expect(updatedSettings.email_notifications).toBe(true); // should remain unchanged
 
       // clean up
-      await NotificationSettings.destroy({ where: { user_id: testUserId } });
+      await NotificationSettings.destroy({ where: { user_id: partialUpdateUser.id } });
     });
   });
 

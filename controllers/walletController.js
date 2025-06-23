@@ -1,6 +1,7 @@
 import Wallet from '../models/Wallet.js';
 import BaseResponse from '../utils/baseResponse.js';
 import { logUserActivity } from '../services/activityService.js';
+import { encryptWalletAddress, isValidWalletAddress } from '../utils/encryption.js';
 
 /**
  * Wallet Controller to handle wallets
@@ -17,18 +18,21 @@ class WalletController {
       const userId = req.user.id;
       const { address, network = 'ethereum', backupMethods = ['device'] } = req.body;
 
-      if (!address) {
+      if (!address || !isValidWalletAddress(address)) {
         return BaseResponse.error(
           res,
           'Invalid request',
           400,
-          'Wallet address is required',
-          'MISSING_WALLET_ADDRESS'
+          'A valid wallet address is required',
+          'INVALID_WALLET_ADDRESS'
         );
       }
+      
+      // Encrypt the address to check for existence and to store
+      const encryptedAddress = encryptWalletAddress(address);
 
-      // check if wallet already exists
-      const existingWallet = await Wallet.findByAddress(address);
+      // check if wallet already exists using the encrypted address
+      const existingWallet = await Wallet.findByAddress(encryptedAddress);
       if (existingWallet) {
         return BaseResponse.error(
           res,
@@ -39,16 +43,14 @@ class WalletController {
         );
       }
 
-      // create wallet
+      // create wallet with the encrypted address
       const newWallet = await Wallet.create({
         userId,
-        address,
+        walletAddress: encryptedAddress, // Pass the encrypted address
         network,
         provider: 'manual',
         backupMethods
       });
-
-
 
       // log activity
       await logUserActivity(
@@ -56,7 +58,8 @@ class WalletController {
         'Wallet created',
         'wallet_created',
         {
-          wallet_address: address,
+          // Log the wallet ID, not the address, for security
+          wallet_id: newWallet.id,
           network,
           provider: 'manual'
         }
@@ -66,7 +69,7 @@ class WalletController {
         res,
         {
           wallet: newWallet,
-          isPrimary: true // the first one is always the primary
+          isPrimary: true
         },
         'Wallet created successfully'
       );
@@ -173,8 +176,20 @@ class WalletController {
     try {
       const { address } = req.params;
       const userId = req.user.id;
-
-      const wallet = await Wallet.findByAddress(address);
+      
+      if (!isValidWalletAddress(address)) {
+        return BaseResponse.error(
+          res,
+          'Invalid address format',
+          400,
+          'The provided wallet address is not valid.',
+          'INVALID_WALLET_ADDRESS'
+        );
+      }
+      
+      // Encrypt address to find it in the database
+      const encryptedAddress = encryptWalletAddress(address);
+      const wallet = await Wallet.findByAddress(encryptedAddress);
 
       if (!wallet) {
         return BaseResponse.error(

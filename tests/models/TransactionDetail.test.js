@@ -22,14 +22,24 @@ describe('TransactionDetail Model', () => {
     testTransactions = setup.getData('transactions');
     
     // get test user and transaction from preset
-    testUser = testUsers.find(u => u.user_id === 'test-sender-001');
-    testTransaction = testTransactions.find(t => t.user_id === 'test-sender-001' && t.status === 'confirmed');
+    testUser = testUsers[0]; // Use first user from preset
+    testTransaction = testTransactions.find(t => t.status === 'completed') || testTransactions[0]; // Find completed transaction or use first one
+    
+    // Verify we have the required test data
+    if (!testUser) {
+      throw new Error('No test user found in preset data');
+    }
+    if (!testTransaction) {
+      throw new Error('No test transaction found in preset data');
+    }
   });
 
   // cleanup test data
   afterAll(async () => {
     // cleanup preset data
-    await setup.cleanup();
+    if (setup && setup.cleanup) {
+      await setup.cleanup();
+    }
   });
 
   describe('create()', () => {
@@ -195,20 +205,20 @@ describe('TransactionDetail Model', () => {
       // verify transactions have required fields
       testTransactions.forEach(transaction => {
         expect(transaction.id).toBeDefined();
-        expect(transaction.user_id).toBeDefined();
+        expect(transaction.sender_id).toBeDefined(); // transactions use sender_id not user_id
         expect(transaction.type).toBeDefined();
         expect(transaction.status).toBeDefined();
         expect(['send', 'receive', 'transfer'].includes(transaction.type)).toBe(true);
-        expect(['pending', 'confirmed', 'failed'].includes(transaction.status)).toBe(true);
+        expect(['pending', 'completed', 'failed'].includes(transaction.status)).toBe(true);
       });
     });
 
     it('should handle multiple transaction details for different networks', async () => {
       // get different transactions from preset
       const pendingTx = testTransactions.find(t => t.status === 'pending');
-      const confirmedTx = testTransactions.find(t => t.status === 'confirmed');
+      const completedTx = testTransactions.find(t => t.status === 'completed');
       
-      if (pendingTx && confirmedTx) {
+      if (pendingTx && completedTx) {
         // create transaction details for different networks
         const ethDetail = await TransactionDetail.create({
           transaction_id: pendingTx.id,
@@ -222,7 +232,7 @@ describe('TransactionDetail Model', () => {
         });
 
         const btcDetail = await TransactionDetail.create({
-          transaction_id: confirmedTx.id,
+          transaction_id: completedTx.id,
           network: 'Bitcoin',
           tx_hash: `0xbtc${Date.now().toString(16)}`,
           confirmations: 6,
@@ -234,13 +244,13 @@ describe('TransactionDetail Model', () => {
 
         // verify details exist
         expect(ethDetail.transaction_id).toBe(pendingTx.id);
-        expect(btcDetail.transaction_id).toBe(confirmedTx.id);
+        expect(btcDetail.transaction_id).toBe(completedTx.id);
         expect(ethDetail.network).toBe('Ethereum');
         expect(btcDetail.network).toBe('Bitcoin');
 
         // clean up
         await TransactionDetail.delete(pendingTx.id);
-        await TransactionDetail.delete(confirmedTx.id);
+        await TransactionDetail.delete(completedTx.id);
       }
     });
 
@@ -286,12 +296,12 @@ describe('TransactionDetail Model', () => {
     it('should validate transaction status correlation with details', async () => {
       // get transactions with different statuses
       const pendingTx = testTransactions.find(t => t.status === 'pending');
-      const confirmedTx = testTransactions.find(t => t.status === 'confirmed');
+      const completedTx = testTransactions.find(t => t.status === 'completed');
       const failedTx = testTransactions.find(t => t.status === 'failed');
       
       const testCases = [
         { tx: pendingTx, confirmations: 0, errorMsg: null, desc: 'pending transaction' },
-        { tx: confirmedTx, confirmations: 6, errorMsg: null, desc: 'confirmed transaction' },
+        { tx: completedTx, confirmations: 6, errorMsg: null, desc: 'completed transaction' },
         { tx: failedTx, confirmations: 0, errorMsg: 'Transaction failed', desc: 'failed transaction' }
       ].filter(tc => tc.tx); // only include existing transactions
 
@@ -321,8 +331,8 @@ describe('TransactionDetail Model', () => {
           expect(detail.block_number).toBeNull();
         }
         
-        // confirmed transactions should have confirmations > 0
-        if (testCase.tx.status === 'confirmed') {
+        // completed transactions should have confirmations > 0
+        if (testCase.tx.status === 'completed') {
           expect(detail.confirmations).toBeGreaterThan(0);
           expect(detail.block_number).not.toBeNull();
         }

@@ -1,7 +1,8 @@
-import { describe, it, beforeAll, afterAll, expect } from 'vitest';
+import { describe, it, beforeAll, afterAll, expect, beforeEach } from 'vitest';
 import ActivityLog from '../../models/ActivityLog.js';
 import User from '../../models/User.js';
 import { quickSetups } from '../../tests/setup/presets.js';
+import { UserTemplates } from '../../tests/setup/userTemplates.js';
 
 describe('ActivityLog Model', () => {
     let setup;
@@ -18,7 +19,13 @@ describe('ActivityLog Model', () => {
 
     afterAll(async () => {
         // cleanup preset data
-        await setup.cleanup();
+        if (setup) {
+            await setup.cleanup();
+        }
+    });
+
+    beforeEach(() => {
+        UserTemplates.resetCounters();
     });
 
     describe('create', () => {

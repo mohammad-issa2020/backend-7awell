@@ -1,5 +1,28 @@
 import { supabaseAdmin } from '../database/supabase.js';
+import { decryptWalletAddress } from '../utils/encryption.js';
 
+/**
+ * Decrypts wallet address(es) in the data returned from Supabase.
+ * @param {Object|Array|null} data - The data from the database.
+ * @returns {Object|Array|null} - The data with decrypted wallet addresses.
+ */
+function decryptWalletData(data) {
+  if (!data) {
+    return null;
+  }
+
+  if (Array.isArray(data)) {
+    return data.map(wallet => ({
+      ...wallet,
+      wallet_address: decryptWalletAddress(wallet.wallet_address),
+    }));
+  }
+
+  return {
+    ...data,
+    wallet_address: decryptWalletAddress(data.wallet_address),
+  };
+}
 
 class Wallet {
 
@@ -7,7 +30,7 @@ class Wallet {
     try {
       const {
         userId,
-        walletAddress,
+        walletAddress, // This is now the ENCRYPTED address
         walletType = 'custodial'
       } = walletData;
 
@@ -15,7 +38,7 @@ class Wallet {
         .from('wallets')
         .insert([{
           user_id: userId,
-          wallet_address: walletAddress.toLowerCase(),
+          wallet_address: walletAddress, // Store the encrypted address directly
           wallet_type: walletType,
           status: 'active',
           created_at: new Date().toISOString()
@@ -27,7 +50,7 @@ class Wallet {
         throw new Error(`Database error: ${error.message}`);
       }
 
-      return data;
+      return decryptWalletData(data);
     } catch (error) {
       console.error('❌ Error creating wallet:', error);
       throw new Error(`Failed to create wallet: ${error.message}`);
@@ -57,7 +80,7 @@ class Wallet {
         throw new Error(`Database error: ${error.message}`);
       }
 
-      return data || null;
+      return decryptWalletData(data);
     } catch (error) {
       console.error('❌ Error finding wallet by ID:', error);
       throw new Error(`Failed to find wallet: ${error.message}`);
@@ -78,7 +101,7 @@ class Wallet {
             last_name
           )
         `)
-        .eq('wallet_address', address.toLowerCase())
+        .eq('wallet_address', address) // Search by the encrypted address
         .eq('status', 'active')
         .single();
 
@@ -86,7 +109,7 @@ class Wallet {
         throw new Error(`Database error: ${error.message}`);
       }
 
-      return data || null;
+      return decryptWalletData(data);
     } catch (error) {
       console.error('❌ Error finding wallet by address:', error);
       throw new Error(`Failed to find wallet: ${error.message}`);
@@ -107,7 +130,7 @@ class Wallet {
         throw new Error(`Database error: ${error.message}`);
       }
 
-      return data || [];
+      return decryptWalletData(data);
     } catch (error) {
       console.error('❌ Error finding wallets by user ID:', error);
       throw new Error(`Failed to find wallets: ${error.message}`);
@@ -129,7 +152,7 @@ class Wallet {
         throw new Error(`Database error: ${error.message}`);
       }
 
-      return data || null;
+      return decryptWalletData(data);
     } catch (error) {
       console.error('❌ Error getting primary wallet:', error);
       return null;

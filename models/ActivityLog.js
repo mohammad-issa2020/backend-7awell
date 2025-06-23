@@ -17,7 +17,7 @@ class ActivityLog {
                 .from('activity_logs')
                 .insert([{
                     user_id: data.user_id,
-                    action: data.action,
+                    action: data.action,    
                     details: data.details || {},
                     ip_address: data.ip_address,
                     device_id: data.device_id

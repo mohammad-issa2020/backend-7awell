@@ -243,23 +243,27 @@ describe('ContactsWithAccounts Model', () => {
     it('should validate contact relationships from preset data', async () => {
       // verify users from preset have expected structure
       const activeUsers = testUsers.filter(u => u.status === 'active');
-      const pendingUsers = testUsers.filter(u => u.status === 'pending');
+      const suspendedUsers = testUsers.filter(u => u.status === 'suspended');
       
       expect(activeUsers.length).toBeGreaterThan(0);
-      expect(pendingUsers.length).toBeGreaterThan(0);
+      expect(testUsers.length).toBeGreaterThan(1); // Should have at least 2 users for contact testing
       
       // verify each user has required fields for contact operations
       testUsers.forEach(user => {
         expect(user.id).toBeDefined();
         expect(user.status).toBeDefined();
-        expect(['active', 'pending', 'inactive'].includes(user.status)).toBe(true);
+        expect(['active', 'suspended', 'deleted'].includes(user.status)).toBe(true);
       });
     });
 
     it('should handle multiple users with contact operations', async () => {
       // use different users from preset
-      const user1 = testUsers.find(u => u.status === 'active');
-      const user2 = testUsers.find(u => u.status === 'pending');
+      const user1 = testUsers[0]; // Use first user
+      const user2 = testUsers[1]; // Use second user
+      
+      // Ensure we have at least 2 users
+      expect(user1).toBeDefined();
+      expect(user2).toBeDefined();
       
       const phoneHash1 = `multicontact1${Date.now().toString(16)}`;
       const phoneHash2 = `multicontact2${Date.now().toString(16)}`;

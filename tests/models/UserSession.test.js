@@ -19,7 +19,9 @@ describe('UserSession Model', () => {
 
     afterAll(async () => {
         // cleanup preset data
-        await setup.cleanup();
+        if (setup && setup.cleanup) {
+            await setup.cleanup();
+        }
     });
 
     describe('create', () => {
@@ -254,23 +256,26 @@ describe('UserSession Model', () => {
         it('should validate session relationships from preset data', async () => {
             // verify users from preset have expected structure
             const activeUsers = testUsers.filter(u => u.status === 'active');
-            const pendingUsers = testUsers.filter(u => u.status === 'pending');
             
             expect(activeUsers.length).toBeGreaterThan(0);
-            expect(pendingUsers.length).toBeGreaterThan(0);
+            expect(testUsers.length).toBeGreaterThan(1); // Should have at least 2 users for session testing
             
             // verify each user has required fields for session operations
             testUsers.forEach(user => {
                 expect(user.id).toBeDefined();
                 expect(user.status).toBeDefined();
-                expect(['active', 'pending', 'inactive'].includes(user.status)).toBe(true);
+                expect(['active', 'suspended', 'deleted'].includes(user.status)).toBe(true);
             });
         });
 
         it('should handle multiple users with session operations', async () => {
             // use different users from preset
-            const user1 = testUsers.find(u => u.status === 'active');
-            const user2 = testUsers.find(u => u.status === 'pending');
+            const user1 = testUsers[0]; // Use first user
+            const user2 = testUsers[1]; // Use second user
+            
+            // Ensure we have at least 2 users
+            expect(user1).toBeDefined();
+            expect(user2).toBeDefined();
             
             const token1 = `multi1_${Date.now()}`;
             const token2 = `multi2_${Date.now()}`;

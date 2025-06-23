@@ -1,4 +1,3 @@
-
 const BASE_USER_TEMPLATE = {
   phone: '+1234567890',
   email: 'baseuser@example.com',
@@ -8,20 +7,27 @@ const BASE_USER_TEMPLATE = {
   kyc_level: 'none'
 };
 
-
-let phoneCounter = 1000000000;
+// Use timestamp and random number to ensure uniqueness across test runs
+let phoneCounter = Date.now() % 1000000; // Start with timestamp modulo
 const generateUniquePhone = () => {
   phoneCounter++;
-  return `+1${phoneCounter}`;
+  const randomSuffix = Math.floor(Math.random() * 10000);
+  return `+1${phoneCounter}${randomSuffix}`;
 };
 
-let emailCounter = 1000;
+let emailCounter = Date.now() % 10000; // Start with timestamp modulo
 const generateUniqueEmail = () => {
   emailCounter++;
   const timestamp = Date.now().toString().slice(-6);
-  return `testuser${emailCounter}_${timestamp}@example.com`;
+  const randomSuffix = Math.floor(Math.random() * 10000);
+  return `testuser${emailCounter}_${timestamp}_${randomSuffix}@example.com`;
 };
 
+// Reset counters to avoid conflicts between test runs
+const resetCounters = () => {
+  phoneCounter = Date.now() % 1000000;
+  emailCounter = Date.now() % 10000;
+};
 
 export const UserTemplates = {
 
@@ -182,8 +188,8 @@ export const UserTemplates = {
   
   getUsersWithDifferentStatuses: () => [
     UserTemplates.getValidUserWithStatus('active'),
-    UserTemplates.getValidUserWithStatus('pending'),
-    UserTemplates.getValidUserWithStatus('inactive')
+    UserTemplates.getValidUserWithStatus('suspended'),
+    UserTemplates.getValidUserWithStatus('deleted')
   ],
 
   
@@ -191,7 +197,7 @@ export const UserTemplates = {
     valid: [
       UserTemplates.getValidUser(),
       UserTemplates.getVerifiedUser(),
-      UserTemplates.getValidUserWithStatus('pending')
+              UserTemplates.getValidUserWithStatus('suspended')
     ],
     invalidPhone: [
       UserTemplates.getUserWithInvalidPhone(),
@@ -222,8 +228,8 @@ export const UserTemplates = {
 
   
   resetCounters: () => {
-    phoneCounter = 1000000000;
-    emailCounter = 1000;
+    phoneCounter = Date.now() % 1000000;
+    emailCounter = Date.now() % 10000;
   }
 };
 
@@ -233,11 +239,11 @@ export const UserTestHelpers = {
   
   expectValidUserStructure: (user) => {
     return {
-      hasRequiredFields: user && user.phone && user.email,
-      hasValidPhone: user && user.phone && user.phone.startsWith('+') && user.phone.length >= 10,
-      hasValidEmail: user && user.email && user.email.includes('@') && user.email.includes('.'),
-      hasValidStatus: user && ['active', 'pending', 'inactive'].includes(user.status),
-      hasValidKycLevel: user && ['none', 'basic', 'full'].includes(user.kyc_level)
+      hasRequiredFields: !!(user && user.phone), // Only phone is required
+      hasValidPhone: !!(user && user.phone && user.phone.startsWith('+') && user.phone.length >= 10),
+      hasValidEmail: !user.email || (user.email && user.email.includes('@') && user.email.includes('.')), // Email can be null or valid
+              hasValidStatus: !!(user && user.status && ['active', 'suspended', 'deleted'].includes(user.status)),
+      hasValidKycLevel: !!(user && user.kyc_level && ['none', 'basic', 'enhanced', 'full'].includes(user.kyc_level))
     };
   },
 

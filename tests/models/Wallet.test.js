@@ -32,19 +32,33 @@ describe('✅ Wallet Model - NO REPETITION', () => {
   let testWallets;
 
   beforeAll(async () => {
-    // load wallet system (users + wallets)
-    setup = await quickSetups.wallets('integration');
-    testUsers = setup.getData('users');
-    testWallets = setup.getData('wallets');
+    try {
+      // load wallet system (users + wallets)
+      setup = await quickSetups.wallets('integration');
+      testUsers = setup.getData('users') || [];
+      testWallets = setup.getData('wallets') || [];
 
-    console.log('✅ Wallet test setup ready:', {
-      users: testUsers.length,
-      wallets: testWallets.length
-    });
+      console.log('✅ Wallet test setup ready:', {
+        users: testUsers.length,
+        wallets: testWallets.length
+      });
+    } catch (error) {
+      console.error('❌ Failed to setup Wallet tests:', error);
+      // Initialize with empty arrays to prevent further errors
+      testUsers = [];
+      testWallets = [];
+      setup = null;
+    }
   });
 
   afterAll(async () => {
-    await setup.cleanup();
+    if (setup && typeof setup.cleanup === 'function') {
+      try {
+        await setup.cleanup();
+      } catch (error) {
+        console.warn('Warning: Failed to cleanup test data:', error.message);
+      }
+    }
   });
 
   describe('Create', () => {

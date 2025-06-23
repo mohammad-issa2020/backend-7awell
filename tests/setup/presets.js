@@ -1,13 +1,28 @@
 import { localSetup, integrationSetup } from './testSetup.js';
+import { UserTemplates } from './userTemplates.js';
+
+// Helper function to generate unique phone numbers
+const generateUniquePhone = (suffix = '') => {
+  const timestamp = Date.now().toString().slice(-6);
+  const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+  return `+1555${timestamp}${random}${suffix}`;
+};
+
+// Helper function to generate unique emails
+const generateUniqueEmail = (prefix, domain = 'example.com') => {
+  const timestamp = Date.now().toString().slice(-6);
+  const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+  return `${prefix}${timestamp}${random}@${domain}`;
+};
 
 export const TestPresets = {
   authUsers: {
     users: {
-      count: 5,
+      count: 6, // Increase count to include more test cases
       specific_items: [
         { 
-          phone: '+1234567890', 
-          email: 'verified@example.com',
+          phone: generateUniquePhone('1'), // Use helper function
+          email: generateUniqueEmail('verified'),
           status: 'active',
           verified: true,
           phone_verified: true,
@@ -15,20 +30,29 @@ export const TestPresets = {
           kyc_level: 'basic'
         },
         { 
-          phone: '+0987654321', 
-          email: 'pending@example.com',
-          status: 'pending',
+          phone: generateUniquePhone('2'), // Different suffix
+          email: generateUniqueEmail('suspended1'),
+          status: 'suspended',
           verified: false,
           phone_verified: false,
           email_verified: false,
           kyc_level: 'none'
         },
         { 
-          phone: '+1111111111', 
-          email: 'inactive@example.com',
-          status: 'inactive',
+          phone: generateUniquePhone('3'), // Different suffix
+          email: generateUniqueEmail('inactive'),
+          status: 'suspended',
           verified: true,
           phone_verified: true,
+          email_verified: false,
+          kyc_level: 'none'
+        },
+        { 
+          phone: generateUniquePhone('4'), // Add a suspended user for Phone tests
+          email: generateUniqueEmail('suspended'),
+          status: 'suspended',
+          verified: false,
+          phone_verified: false,
           email_verified: false,
           kyc_level: 'none'
         }
@@ -42,8 +66,8 @@ export const TestPresets = {
       count: 2,
       specific_items: [
         {
-          phone: '+1234567890', // EXISTING_PHONE for duplicate tests
-          email: 'existing@example.com', // EXISTING_EMAIL for duplicate tests
+          phone: generateUniquePhone('ut1'), // Use unique phone number
+          email: generateUniqueEmail('existing'), // Use unique email for duplicate tests
           status: 'active',
           verified: true,
           phone_verified: true,
@@ -51,8 +75,8 @@ export const TestPresets = {
           kyc_level: 'basic'
         },
         {
-          phone: '+1987654321',
-          email: 'test.reference@example.com',
+          phone: generateUniquePhone('ut2'), // Use unique phone number
+          email: generateUniqueEmail('test.reference'),
           status: 'active',
           verified: true,
           phone_verified: true,
@@ -68,22 +92,22 @@ export const TestPresets = {
       count: 3,
       specific_items: [
         { 
-          phone: '+1555000001', 
-          email: 'sender@example.com',
-          status: 'active',
-          user_id: 'test-sender-001'
+          phone: generateUniquePhone('tu1'), 
+          email: generateUniqueEmail('sender'),
+          status: 'active'
+          // user_id will be auto-generated as UUID
         },
         { 
-          phone: '+1555000002', 
-          email: 'receiver@example.com',
-          status: 'active',
-          user_id: 'test-receiver-001'
+          phone: generateUniquePhone('tu2'), 
+          email: generateUniqueEmail('receiver'),
+          status: 'active'
+          // user_id will be auto-generated as UUID
         },
         { 
-          phone: '+1555000003', 
-          email: 'whale@example.com',
-          status: 'active',
-          user_id: 'test-whale-001'
+          phone: generateUniquePhone('tu3'), 
+          email: generateUniqueEmail('whale'),
+          status: 'active'
+          // user_id will be auto-generated as UUID
         }
       ]
     }
@@ -94,16 +118,16 @@ export const TestPresets = {
       count: 2,
       specific_items: [
         { 
-          phone: `+1555${Date.now().toString().slice(-6)}${Math.random().toString().slice(-3)}1`, 
-          email: `sender${Date.now().toString().slice(-6)}@example.com`,
-          status: 'active',
-          user_id: 'test-sender-001'
+          phone: generateUniquePhone('tf1'), 
+          email: generateUniqueEmail('sender'),
+          status: 'active'
+          // user_id will be auto-generated as UUID
         },
         { 
-          phone: `+1555${Date.now().toString().slice(-6)}${Math.random().toString().slice(-3)}2`, 
-          email: `receiver${Date.now().toString().slice(-6)}@example.com`,
-          status: 'active',
-          user_id: 'test-receiver-001'
+          phone: generateUniquePhone('tf2'), 
+          email: generateUniqueEmail('receiver'),
+          status: 'active'
+          // user_id will be auto-generated as UUID
         }
       ]
     },
@@ -111,13 +135,13 @@ export const TestPresets = {
       count: 2,
       specific_items: [
         {
-          user_id: 'test-sender-001',
+          // user_id will be set from created users
           network: 'ethereum',
           balance: '10.5'
           // address will be auto-generated to avoid collisions
         },
         {
-          user_id: 'test-receiver-001',
+          // user_id will be set from created users
           network: 'ethereum',
           balance: '2.0'
           // address will be auto-generated to avoid collisions
@@ -128,31 +152,28 @@ export const TestPresets = {
       count: 3,
       specific_items: [
         {
-          sender_id: 'test-sender-001',
-          recipient_id: 'test-receiver-001',
+          // sender_id and recipient_id will be set from created users
           type: 'transfer',
           amount: '1.5',
           asset_symbol: 'ETH',
-          status: 'completed',
-          reference: 'tx-001'
+          status: 'completed'
+          // reference will be auto-generated to avoid duplicates
         },
         {
-          sender_id: 'test-sender-001',
-          recipient_id: 'test-receiver-001',
+          // sender_id and recipient_id will be set from created users
           type: 'transfer',
           amount: '0.5',
           asset_symbol: 'BTC',
-          status: 'pending',
-          reference: 'tx-002'
+          status: 'pending'
+          // reference will be auto-generated to avoid duplicates
         },
         {
-          sender_id: 'test-sender-001',
-          recipient_id: 'test-receiver-001',
+          // sender_id and recipient_id will be set from created users
           type: 'transfer',
           amount: '2.0',
           asset_symbol: 'ETH',
-          status: 'completed',
-          reference: 'tx-003'
+          status: 'completed'
+          // reference will be auto-generated to avoid duplicates
         }
       ]
     }
@@ -162,8 +183,8 @@ export const TestPresets = {
     users: {
       count: 2,
       specific_items: [
-        { email: 'user1@example.com', status: 'active' },
-        { email: 'user2@example.com', status: 'active' }
+        { email: generateUniqueEmail('user1'), status: 'active' },
+        { email: generateUniqueEmail('user2'), status: 'active' }
       ]
     },
     promotions: {
@@ -172,23 +193,38 @@ export const TestPresets = {
         {
           title: 'Welcome Bonus',
           description: 'Get $10 for signing up',
+          image_url: 'https://example.com/welcome.jpg',
+          link_url: 'https://example.com/welcome',
           is_active: true,
           priority: 100,
-          background_color: '#4CAF50'
+          background_color: '#4CAF50',
+          start_date: new Date().toISOString(),
+          end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
+          locale: 'en'
         },
         {
           title: 'Referral Bonus',
           description: 'Invite friends and earn',
+          image_url: 'https://example.com/referral.jpg',
+          link_url: 'https://example.com/referral',
           is_active: true,
           priority: 200,
-          background_color: '#2196F3'
+          background_color: '#2196F3',
+          start_date: new Date().toISOString(),
+          end_date: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(), // 60 days from now
+          locale: 'en'
         },
         {
           title: 'Expired Offer',
           description: 'This offer has expired',
+          image_url: 'https://example.com/expired.jpg',
+          link_url: 'https://example.com/expired',
           is_active: false,
           priority: 50,
-          background_color: '#FF5722'
+          background_color: '#FF5722',
+          start_date: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(), // 60 days ago
+          end_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days ago (expired)
+          locale: 'en'
         }
       ]
     }
@@ -197,35 +233,53 @@ export const TestPresets = {
   walletSetup: {
     users: {
       count: 3,
+      defaults: {
+        status: 'active',
+        phone_verified: true,
+        email_verified: true,
+        kyc_level: 'none'
+      },
       specific_items: [
-        { email: 'wallet-user1@example.com', user_id: 'wallet-test-001' },
-        { email: 'wallet-user2@example.com', user_id: 'wallet-test-002' },
-        { email: 'wallet-user3@example.com', user_id: 'wallet-test-003' }
+        { 
+          email: generateUniqueEmail('wallet-user1'), 
+          phone: generateUniquePhone('w1')
+          // user_id will be auto-generated as UUID
+        },
+        { 
+          email: generateUniqueEmail('wallet-user2'), 
+          phone: generateUniquePhone('w2')
+          // user_id will be auto-generated as UUID
+        },
+        { 
+          email: generateUniqueEmail('wallet-user3'), 
+          phone: generateUniquePhone('w3')
+          // user_id will be auto-generated as UUID
+        }
       ]
     },
     wallets: {
-      count: 5,
+      count: 4,
       specific_items: [
         {
-          user_id: 'wallet-test-001',
+          user_index: 0, // Reference first user
           network: 'ethereum',
           balance: '5.0',
           is_active: true
         },
         {
-          user_id: 'wallet-test-001',
+          user_index: 0, // Reference first user
           network: 'bitcoin',
           balance: '0.1',
           is_active: true
         },
         {
-          user_id: 'wallet-test-002',
+          user_index: 1, // Reference second user
           network: 'ethereum',
           balance: '0.0',
           is_active: false
         },
         {
-          user_id: 'wallet-test-003',
+          user_index: 2, // Reference third user
           network: 'solana',
           balance: '100.0',
           is_active: true
@@ -238,30 +292,36 @@ export const TestPresets = {
     users: {
       count: 2,
       specific_items: [
-        { email: 'session-user1@example.com', user_id: 'session-test-001' },
-        { email: 'session-user2@example.com', user_id: 'session-test-002' }
+        { 
+          email: generateUniqueEmail('session-user1'), 
+          phone: generateUniquePhone('s1')  // Shorter suffix to fit in VARCHAR(20)
+        },
+        { 
+          email: generateUniqueEmail('session-user2'), 
+          phone: generateUniquePhone('s2')  // Shorter suffix to fit in VARCHAR(20)
+        }
       ]
     },
     sessions: {
       count: 4,
       specific_items: [
         {
-          user_id: 'session-test-001',
+          user_index: 0,  // Reference first user by index instead of email
           status: 'active',
           expires_in_minutes: 1440
         },
         {
-          user_id: 'session-test-001',
+          user_index: 0,  // Reference first user by index instead of email
           status: 'expired',
           expires_in_minutes: -60
         },
         {
-          user_id: 'session-test-002',
+          user_index: 1,  // Reference second user by index instead of email
           status: 'active',
           expires_in_minutes: 60
         },
         {
-          user_id: 'session-test-002',
+          user_index: 1,  // Reference second user by index instead of email
           status: 'revoked',
           expires_in_minutes: 1440
         }
@@ -288,8 +348,15 @@ export class PresetTestSetup {
 
 
   async loadPreset(presetName) {
-    if (!TestPresets[presetName]) {
-      throw new Error(`❌ Preset '${presetName}' not found. Available presets: ${Object.keys(TestPresets).join(', ')}`);
+    console.log(`📦 Loading preset: ${presetName}`);
+    
+    // Reset state BEFORE any setup runs
+    UserTemplates.resetCounters();
+    await this.cleanup(); // Clean DB state
+
+    const presetConfig = TestPresets[presetName];
+    if (!presetConfig) {
+      throw new Error(`Preset "${presetName}" not found.`);
     }
 
     if (this.loadedPresets.has(presetName)) {
@@ -297,8 +364,7 @@ export class PresetTestSetup {
       return this.setup.getCreatedData();
     }
 
-    console.log(`📦 Loading preset: ${presetName}`);
-    const data = await this.setup.create(TestPresets[presetName]);
+    const data = await this.setup.create(presetConfig);
     this.loadedPresets.add(presetName);
     
     console.log(`✅ Preset '${presetName}' loaded successfully`);

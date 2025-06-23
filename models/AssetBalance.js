@@ -44,21 +44,21 @@ class AssetBalance {
   /**
    * Find asset balance by ID
    * @param {string} id - Asset balance ID
-   * @returns {Object} Found asset balance
+   * @returns {Object|null} Found asset balance or null if not found
    */
   static async findById(id) {
     try {
       const { data, error } = await supabaseAdmin
         .from(this.table)
         .select('*')
-        .eq('id', id)
-        .single();
+        .eq('id', id);
 
       if (error) {
         throw new Error(`Database error: ${error.message}`);
       }
 
-      return data;
+      // Return null if no data found, otherwise return first result
+      return data && data.length > 0 ? data[0] : null;
     } catch (error) {
       console.error('❌ Error finding asset balance by ID:', error);
       throw new Error(`Failed to find asset balance: ${error.message}`);

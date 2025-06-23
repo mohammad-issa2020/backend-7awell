@@ -236,7 +236,7 @@ describe('🧪 User Model Tests - Complete Coverage', () => {
     });
 
     it('should return null for non-existent user ID', async () => {
-      const nonExistentId = 'non-existent-id-12345';
+      const nonExistentId = '00000000-0000-0000-0000-000000000001';
       
       const foundUser = await User.findByPk(nonExistentId);
       

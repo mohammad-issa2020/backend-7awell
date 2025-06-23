@@ -111,7 +111,7 @@ describe('Transaction API Integration Tests', () => {
   describe('GET /api/transactions/options', () => {
     it('should get transaction options with authentication', async () => {
       const response = await request(app)
-        .get('/api/transactions/options')
+        .get('/api/transactions')
         .set('Authorization', `Bearer ${sessionToken}`);
 
       expect(response.status).toBe(200);

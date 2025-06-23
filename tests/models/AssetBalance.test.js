@@ -19,13 +19,15 @@ describe('AssetBalance Model', () => {
     testWallets = setup.getData('wallets');
     
     // get specific test data
-    testUser = testUsers.find(u => u.status === 'active');
-    testWallet = testWallets.find(w => w.user_id === testUser.user_id);
+    testUser = testUsers[0]; // Use first user instead of searching by status
+    testWallet = testWallets.find(w => w.user_id === testUser.id); // Fix property name
   });
 
   afterAll(async () => {
     // cleanup preset data
-    await setup.cleanup();
+    if (setup && setup.cleanup) {
+      await setup.cleanup();
+    }
   });
 
   describe('Create', () => {
@@ -310,7 +312,7 @@ describe('AssetBalance Model', () => {
       expect(testUsers.length).toBeGreaterThan(0);
       
       // verify wallet belongs to user
-      const userWallets = testWallets.filter(w => w.user_id === testUser.user_id);
+      const userWallets = testWallets.filter(w => w.user_id === testUser.id);
       expect(userWallets.length).toBeGreaterThan(0);
       
       // verify wallet has required fields
