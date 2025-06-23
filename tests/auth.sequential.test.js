@@ -226,6 +226,128 @@ describe('Sequential Authentication Flow', () => {
       // This would test rate limiting across the flow
     });
   });
+
+  // NEW: Test the updated sequential flow
+  describe('Updated Sequential Authentication Flow', () => {
+    let sessionId;
+    
+    it('should complete the full authentication flow with separated email verification and login completion', async () => {
+      // Step 1: Start phone login
+      const phoneResponse = await request(app)
+        .post('/api/auth/login/phone')
+        .send({
+          phoneNumber: '+1987654321'
+        });
+
+      expect(phoneResponse.status).toBe(200);
+      expect(phoneResponse.body.data.sessionId).toBeDefined();
+      sessionId = phoneResponse.body.data.sessionId;
+
+      // Step 2: Verify phone OTP
+      const phoneVerifyResponse = await request(app)
+        .post('/api/auth/login/phone/verify')
+        .send({
+          sessionId,
+          otp: '123456'
+        });
+
+      expect(phoneVerifyResponse.status).toBe(200);
+      expect(phoneVerifyResponse.body.data.step).toBe('email_verification');
+
+      // Step 3: Start email login
+      const emailResponse = await request(app)
+        .post('/api/auth/login/email')
+        .send({
+          sessionId,
+          email: 'test.sequential@example.com'
+        });
+
+      expect(emailResponse.status).toBe(200);
+      expect(emailResponse.body.data.step).toBe('email_verification');
+
+      // Step 4: Verify email OTP (NEW - only verifies, doesn't complete login)
+      const emailVerifyResponse = await request(app)
+        .post('/api/auth/login/email/verify')
+        .send({
+          sessionId,
+          otp: '123456'
+        });
+
+      expect(emailVerifyResponse.status).toBe(200);
+      expect(emailVerifyResponse.body.data.step).toBe('ready_to_complete');
+      expect(emailVerifyResponse.body.data.phoneVerified).toBe(true);
+      expect(emailVerifyResponse.body.data.emailVerified).toBe(true);
+      expect(emailVerifyResponse.body.message).toContain('Email OTP verified successfully');
+      
+      // Should NOT contain session token yet
+      expect(emailVerifyResponse.body.data.session).toBeUndefined();
+
+      // Step 5: Complete login (NEW - gets session token after both verifications)
+      const completeResponse = await request(app)
+        .post('/api/auth/login/complete')
+        .send({
+          sessionId
+        });
+
+      expect(completeResponse.status).toBe(200);
+      expect(completeResponse.body.data.session).toBeDefined();
+      expect(completeResponse.body.data.session.session_token).toBeDefined();
+      expect(completeResponse.body.data.user).toBeDefined();
+      expect(completeResponse.body.data.user.phoneNumber).toBe('+1987654321');
+      expect(completeResponse.body.data.user.email).toBe('test.sequential@example.com');
+      expect(completeResponse.body.message).toBe('Login completed successfully');
+    });
+
+    it('should not allow complete login if email is not verified', async () => {
+      // Start a new session
+      const phoneResponse = await request(app)
+        .post('/api/auth/login/phone')
+        .send({
+          phoneNumber: '+1987654322'
+        });
+
+      const newSessionId = phoneResponse.body.data.sessionId;
+
+      // Verify phone only
+      await request(app)
+        .post('/api/auth/login/phone/verify')
+        .send({
+          sessionId: newSessionId,
+          otp: '123456'
+        });
+
+      // Try to complete login without email verification
+      const completeResponse = await request(app)
+        .post('/api/auth/login/complete')
+        .send({
+          sessionId: newSessionId
+        });
+
+      expect(completeResponse.status).toBe(400);
+      expect(completeResponse.body.message).toContain('Both phone and email verification required');
+    });
+
+    it('should not allow complete login if phone is not verified', async () => {
+      // Start a new session
+      const phoneResponse = await request(app)
+        .post('/api/auth/login/phone')
+        .send({
+          phoneNumber: '+1987654323'
+        });
+
+      const newSessionId = phoneResponse.body.data.sessionId;
+
+      // Try to complete login without any verification
+      const completeResponse = await request(app)
+        .post('/api/auth/login/complete')
+        .send({
+          sessionId: newSessionId
+        });
+
+      expect(completeResponse.status).toBe(400);
+      expect(completeResponse.body.message).toContain('Invalid step');
+    });
+  });
 });
 
 // Helper function for mocking Stytch responses in tests

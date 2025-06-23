@@ -48,14 +48,6 @@ router.use(generalRateLimit);
 router.use(suspiciousActivityTracker());
 router.use(errorActivityLogger());
 
-// Public routes (no authentication required)
-
-router.get(
-  '/check-availability',
-  validateQuery(checkAvailabilitySchema),
-  authController.checkAvailability
-);
-
 
 router.post(
   '/refresh',
@@ -74,14 +66,14 @@ router.get(
   '/devices',
   authenticateToken,
   securityActivityLogger('Get devices'),
-  authController.getDevices
+  authController.getSessions
 );
 
 router.delete(
   '/devices/:deviceId',
   authenticateToken,
   securityActivityLogger('Revoke device'),
-  authController.revokeDevice
+  authController.revokeSession
 );
 
 router.delete(
@@ -89,35 +81,6 @@ router.delete(
   authenticateToken,
   securityActivityLogger('Revoke all devices'),
   authController.revokeAllSessions
-);
-
-// Multi-step verification routes
-router.post(
-  '/verification/start',
-  validateBody(startVerificationSchema),
-  authActivityLogger('Start Verification'),
-  authController.startVerification
-);
-
-router.post(
-  '/verification/send-otp',
-  validateBody(sendVerificationOTPSchema),
-  authActivityLogger('Send Verification OTP'),
-  authController.sendVerificationOTP
-);
-
-router.post(
-  '/verification/verify-otp',
-  validateBody(verifyVerificationOTPSchema),
-  authActivityLogger('Verify Verification OTP'),
-  authController.verifyVerificationOTP
-);
-
-router.post(
-  '/verification/complete-login',
-  validateBody(completeLoginSchema),
-  authActivityLogger('Complete Login'),
-  authController.completeLogin
 );
 
 router.get(
@@ -151,12 +114,20 @@ router.post(
   authController.startEmailLogin
 );
 
-// Step 4: Verify email OTP and complete login
+// Step 4: Verify email OTP (without completing login)
 router.post(
   '/login/email/verify',
   validateBody(emailVerifySchema),
-  authActivityLogger('Verify Email OTP and Complete Login'),
-  authController.verifyEmailOTPAndComplete
+  authActivityLogger('Verify Email OTP'),
+  authController.verifyEmailOTP
+);
+
+// Step 5: Complete login after both verifications
+router.post(
+  '/login/complete',
+  validateBody(completeLoginSchema),
+  authActivityLogger('Complete Login'),
+  authController.completeLogin
 );
 
 // NEW: Phone Change with OTP Verification (Guarded Operation)

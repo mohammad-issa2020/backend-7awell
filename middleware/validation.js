@@ -256,7 +256,12 @@ export const verifyVerificationOTPSchema = Joi.object({
 });
 
 export const completeLoginSchema = Joi.object({
-  sessionId: Joi.string().uuid().required()
+  sessionId: Joi.string()
+    .pattern(/^seq_auth_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+    .required()
+    .messages({
+      'string.pattern.base': '"sessionId" must be a valid sequential auth session ID'
+    })
 });
 
 // NEW: Sequential Authentication Flow Schemas

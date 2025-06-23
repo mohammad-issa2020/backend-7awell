@@ -21,66 +21,6 @@ class AuthService {
   }
 
   /**
-   * Check availability (phone/email)
-   * @param {string} medium - 'phone' or 'email'
-   * @param {string} value - phone number or email address
-   * @returns {Object} availability result
-   */
-  async checkAvailability(medium, value) {
-    try {
-      console.log(`🔍 Checking availability for ${medium}: ${value}`);
-      
-      if (medium === 'phone') {
-        // Use search API for phone numbers
-        const searchQuery = {
-          query: {
-            operator: 'AND',
-            operands: [{
-              filter_name: 'phone_number',
-              filter_value: [value]
-            }]
-          }
-        };
-
-        const result = await stytchClient.users.search(searchQuery);
-        
-        console.log(`📊 Phone search result:`, { 
-          found: result.results?.length > 0,
-          count: result.results?.length || 0 
-        });
-
-        return {
-          available: !result.results || result.results.length === 0,
-          medium,
-          value,
-          message: result.results?.length > 0 ? 
-            'Phone number is already registered' : 
-            'Phone number is available'
-        };
-
-      } else if (medium === 'email') {
-        // For email, we'll skip the availability check since Stytch doesn't support email search filters
-        // We'll let Stytch handle the duplicate email check during the actual OTP send process
-        console.log(`📧 Skipping email availability check - will be handled by Stytch during OTP send`);
-        
-        return {
-          available: true, // We assume it's available and let Stytch handle duplicates
-          medium,
-          value,
-          message: 'Email availability will be checked during OTP send'
-        };
-
-      } else {
-        throw new Error('Invalid medium. Must be phone or email.');
-      }
-
-    } catch (error) {
-      console.error(`❌ Error checking availability: ${error.message}`);
-      throw new Error(`Error checking availability: ${error.message}`);
-    }
-  }
-
-  /**
    * Refresh Stytch session
    * @param {string} session_token - Stytch session token
    * @returns {Object} refreshed session data
@@ -729,14 +669,14 @@ class AuthService {
   }
 
   /**
-   * Step 4: Verify email OTP and complete login
-   * @param {string} sessionId - Sequential auth session ID
+   * Step 4: Verify email OTP (without completing login)
+   * @param {string} sessionId - Session ID
    * @param {string} otp - Email OTP code
-   * @returns {Object} Complete authentication result with token
+   * @returns {Object} verification result
    */
-  async verifyEmailOTPAndComplete(sessionId, otp) {
+  async verifyEmailOTP(sessionId, otp) {
     try {
-      console.log('🎉 Completing login for session:', sessionId);
+      console.log('🔐 Verifying email OTP for session:', sessionId);
       
       // Initialize if not exists
       this.sequentialAuthSessions = this.sequentialAuthSessions || new Map();
@@ -769,15 +709,13 @@ class AuthService {
         throw new Error('Maximum email OTP attempts exceeded');
       }
       
-      // Verify email OTP with Stytch - using unified authenticate method
+      // Verify email OTP with Stytch
       try {
         console.log('🔐 Verifying email OTP...');
         
-        // Stytch uses a single authenticate method for all OTP types
         const emailResult = await stytchClient.otps.authenticate({
           method_id: session.stytchEmailId,
-          code: otp,
-          session_duration_minutes: 60 // Create a session that lasts 1 hour
+          code: otp
         });
         
         if (emailResult.status_code !== 200) {
@@ -786,12 +724,90 @@ class AuthService {
         
         console.log('✅ Email OTP verified successfully');
         
-        // The email OTP verification already provides a session token and user info
-        const stytchUser = emailResult.user;
+        // Update session to mark email as verified
+        session.emailVerified = true;
+        session.step = 'ready_to_complete';
+        session.stytchUser = emailResult.user;
+        this.sequentialAuthSessions.set(sessionId, session);
+        
+        console.log('📋 Email verification completed, ready for login completion');
+        
+        return {
+          sessionId,
+          step: 'ready_to_complete',
+          phoneVerified: true,
+          emailVerified: true,
+          message: 'Email OTP verified successfully. Ready to complete login.'
+        };
+        
+      } catch (error) {
+        // Increment attempts
+        session.emailAttempts++;
+        this.sequentialAuthSessions.set(sessionId, session);
+        
+        throw new Error(`Email OTP verification failed: ${error.message}`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Email OTP verification error:', error);
+      throw new Error(`Email OTP verification failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Step 5: Complete login after both phone and email are verified
+   * @param {string} sessionId - Session ID
+   * @returns {Object} complete login result with session token
+   */
+  async completeLogin(sessionId) {
+    try {
+      console.log('🎉 Completing login for session:', sessionId);
+      
+      // Initialize if not exists
+      this.sequentialAuthSessions = this.sequentialAuthSessions || new Map();
+      
+      // Get session
+      const session = this.sequentialAuthSessions.get(sessionId);
+      if (!session) {
+        throw new Error('Invalid or expired session');
+      }
+      
+      // Check session expiry
+      if (Date.now() > session.expiresAt) {
+        this.sequentialAuthSessions.delete(sessionId);
+        throw new Error('Session expired');
+      }
+      
+      // Check step
+      if (session.step !== 'ready_to_complete') {
+        throw new Error('Invalid step. Both phone and email verification required.');
+      }
+      
+      // Check if both phone and email were verified
+      if (!session.phoneVerified || !session.emailVerified) {
+        throw new Error('Both phone and email verification required');
+      }
+      
+      // Create Stytch session
+      try {
+        console.log('🔑 Creating Stytch session...');
+        
+        const sessionResult = await stytchClient.sessions.create({
+          user_id: session.stytchUser.user_id,
+          session_duration_minutes: 60 // 1 hour session
+        });
+        
+        if (sessionResult.status_code !== 200) {
+          throw new Error('Failed to create session');
+        }
+        
+        console.log('✅ Stytch session created successfully');
+        
+        const stytchUser = session.stytchUser;
         const stytchSession = {
-          session_token: emailResult.session_token,
-          session_jwt: emailResult.session_jwt,
-          session: emailResult.session
+          session_token: sessionResult.session_token,
+          session_jwt: sessionResult.session_jwt,
+          session: sessionResult.session
         };
         
         // Create or get user in Supabase
@@ -830,11 +846,7 @@ class AuthService {
         };
         
       } catch (error) {
-        // Increment attempts
-        session.emailAttempts++;
-        this.sequentialAuthSessions.set(sessionId, session);
-        
-        throw new Error(`Email OTP verification failed: ${error.message}`);
+        throw new Error(`Session creation failed: ${error.message}`);
       }
       
     } catch (error) {
