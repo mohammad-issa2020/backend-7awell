@@ -361,21 +361,41 @@ class AuthService {
           }
         };
 
-        const result = await stytchClient.users.search(searchQuery);
+        try {
+          const result = await stytchClient.users.search(searchQuery);
 
-        console.log(`📊 Phone search result:`, {
-          found: result.results?.length > 0,
-          count: result.results?.length || 0
-        });
+          // Handle case where result or results might be undefined
+          const hasResults = result && result.results && Array.isArray(result.results);
+          const resultCount = hasResults ? result.results.length : 0;
 
-        return {
-          available: !result.results || result.results.length === 0,
-          medium,
-          value,
-          message: result.results?.length > 0 ?
-            'Phone number is already registered' :
-            'Phone number is available'
-        };
+          console.log(`📊 Phone search result:`, {
+            found: resultCount > 0,
+            count: resultCount,
+            hasResults
+          });
+
+          return {
+            available: resultCount === 0,
+            medium,
+            value,
+            message: resultCount > 0 ?
+              'Phone number is already registered' :
+              'Phone number is available'
+          };
+        } catch (stytchError) {
+          console.error(`❌ Stytch search error: ${stytchError.message}`);
+          
+          // If Stytch search fails, assume phone is available for new registration
+          // This is a fallback to prevent blocking the authentication flow
+          console.log('🔄 Falling back to assuming phone is available due to search error');
+          
+          return {
+            available: true,
+            medium,
+            value,
+            message: 'Phone availability check failed - assuming available for registration'
+          };
+        }
 
       } else if (medium === 'email') {
         // For email, we'll skip the availability check since Stytch doesn't support email search filters
@@ -395,7 +415,14 @@ class AuthService {
 
     } catch (error) {
       console.error(`❌ Error checking availability: ${error.message}`);
-      throw new Error(`Error checking availability: ${error.message}`);
+      
+      // For any other errors, provide a fallback response
+      return {
+        available: true,
+        medium,
+        value,
+        message: `Availability check failed - assuming ${medium} is available`
+      };
     }
   }
 

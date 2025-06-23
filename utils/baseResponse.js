@@ -21,7 +21,7 @@ class BaseResponse {
   static success(res, data = null, message = 'Success', statusCode = 200, traceId = null) {
     const response = {
       statusCode,
-      status: 'SUCCESS',
+      status: 'success',
       message,
       timestamp: new Date().toISOString(),
       traceId: traceId || this.generateTraceId()
@@ -46,7 +46,7 @@ class BaseResponse {
   static error(res, message = 'Internal Server Error', statusCode = 500, error = null, errorCode = null, traceId = null) {
     const response = {
       statusCode,
-      status: 'ERROR',
+      status: 'error',
       message,
       timestamp: new Date().toISOString(),
       traceId: traceId || this.generateTraceId()
@@ -149,7 +149,7 @@ class BaseResponse {
 export function createSuccessResponse(data = null, message = 'Success', statusCode = 200, traceId = null) {
   const response = {
     statusCode,
-    status: 'SUCCESS',
+    status: 'success',
     message,
     timestamp: new Date().toISOString(),
     traceId: traceId || BaseResponse.generateTraceId()
@@ -174,7 +174,7 @@ export function createSuccessResponse(data = null, message = 'Success', statusCo
 export function createErrorResponse(message = 'Internal Server Error', errorCode = null, statusCode = 500, error = null, traceId = null) {
   const response = {
     statusCode,
-    status: 'ERROR',
+    status: 'error',
     message,
     timestamp: new Date().toISOString(),
     traceId: traceId || BaseResponse.generateTraceId()
