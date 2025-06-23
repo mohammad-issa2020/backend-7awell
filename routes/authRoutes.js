@@ -9,9 +9,8 @@ import {
   suspiciousActivityTracker,
   errorActivityLogger
 } from '../middleware/activityMiddleware.js';
+import { validateBody, validateQuery } from '../middleware/validation.js';
 import {
-  validateBody,
-  validateQuery,
   checkAvailabilitySchema,
   refreshTokenSchema,
   startVerificationSchema,
@@ -83,11 +82,6 @@ router.delete(
   authController.revokeAllSessions
 );
 
-router.get(
-  '/verification/status/:sessionId',
-  authActivityLogger('Get Verification Status'),
-  authController.getVerificationStatus
-);
 
 // NEW: Sequential Authentication Flow Routes
 // Step 1: Send phone OTP

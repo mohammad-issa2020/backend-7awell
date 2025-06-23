@@ -1,4 +1,5 @@
-require('dotenv').config();
+import dotenv from 'dotenv';
+dotenv.config();
 
 const config = {
   // Server Configuration
@@ -148,4 +149,4 @@ if (process.env.NODE_ENV !== 'test') {
   validateConfig();
 }
 
-module.exports = config; 
+export default config; 

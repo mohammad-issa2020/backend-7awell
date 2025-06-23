@@ -2,209 +2,67 @@ import express from 'express';
 import contactController from '../controllers/contactController.js';
 import { authenticateToken } from '../middleware/authMiddleware.js';
 import { validateBody, validateQuery } from '../middleware/validation.js';
-import Joi from 'joi';
+import {
+  syncContacts as syncContactsSchema,
+  getContacts as getContactsSchema,
+  searchContacts as searchContactsSchema
+} from '../schemas/contactSchemas.js';
 
 const router = express.Router();
-
-// Validation schemas
-const syncContactsSchema = Joi.object({
-  phoneNumbers: Joi.array()
-    .items(Joi.string().pattern(/^\+?[1-9]\d{1,14}$/))
-    .min(1)
-    .max(10000)
-    .required()
-    .messages({
-      'array.base': 'phoneNumbers must be an array',
-      'array.min': 'At least one phone number is required',
-      'array.max': 'Maximum 10,000 phone numbers allowed',
-      'string.pattern.base': 'Invalid phone number format'
-    }),
-  deviceContactsCount: Joi.number()
-    .positive()
-    .required()
-    .messages({
-      'number.base': 'deviceContactsCount must be a number',
-      'number.positive': 'deviceContactsCount must be positive'
-    }),
-  batchSize: Joi.number()
-    .integer()
-    .min(100)
-    .max(1000)
-    .optional()
-    .messages({
-      'number.base': 'batchSize must be a number',
-      'number.integer': 'batchSize must be an integer',
-      'number.min': 'batchSize must be at least 100',
-      'number.max': 'batchSize cannot exceed 1000'
-    })
-});
-
-const updateInteractionSchema = Joi.object({
-  phoneNumber: Joi.string()
-    .pattern(/^\+?[1-9]\d{1,14}$/)
-    .required()
-    .messages({
-      'string.pattern.base': 'Invalid phone number format'
-    })
-});
-
-const createPhoneMappingSchema = Joi.object({
-  phoneNumber: Joi.string()
-    .pattern(/^\+?[1-9]\d{1,14}$/)
-    .required()
-    .messages({
-      'string.pattern.base': 'Invalid phone number format'
-    })
-});
-
-const getContactsSchema = Joi.object({
-  favorites: Joi.string().valid('true', 'false').default('false'),
-  limit: Joi.number().min(1).max(100).default(50),
-  offset: Joi.number().min(0).default(0)
-});
-
-const searchContactsSchema = Joi.object({
-  q: Joi.string().min(2).max(50).required().messages({
-    'string.min': 'Search term must be at least 2 characters',
-    'string.max': 'Search term must not exceed 50 characters'
-  }),
-  limit: Joi.number().min(1).max(50).default(20),
-  offset: Joi.number().min(0).default(0)
-});
 
 // Apply authentication to all routes
 router.use(authenticateToken);
 
+// ============================================================================
+// ORIGINAL CONTACT ENDPOINTS
+// ============================================================================
+
 /**
- * @route   POST /api/v1/contacts/sync
- * @desc    Sync user contacts with the platform (optimized batch processing)
- * @access  Private
- * @body    { phoneNumbers: string[], deviceContactsCount: number, batchSize?: number }
+ * Sync user contacts with optimized batch processing
+ * @route POST /api/v1/contacts/sync
+ * @access Private
  */
-router.post('/sync', 
+router.post('/sync',
   validateBody(syncContactsSchema),
   contactController.syncContacts
 );
 
 /**
- * @route   POST /api/v1/contacts/sync/estimate
- * @desc    Estimate contact sync performance
- * @access  Private
- * @body    { contactCount: number, batchSize?: number }
+ * Get user contacts with pagination and filtering
+ * @route GET /api/v1/contacts
+ * @access Private
  */
-router.post('/sync/estimate',
-  validateBody(Joi.object({
-    contactCount: Joi.number().integer().min(1).max(10000).required(),
-    batchSize: Joi.number().integer().min(100).max(1000).optional()
-  })),
-  contactController.estimateSyncPerformance
-);
-
-/**
- * @route   GET /api/v1/contacts/sync/statistics
- * @desc    Get contact sync statistics
- * @access  Private
- * @query   { days?: number }
- */
-router.get('/sync/statistics',
-  validateQuery(Joi.object({
-    days: Joi.number().integer().min(1).max(365).default(30)
-  })),
-  contactController.getSyncStatistics
-);
-
-/**
- * @route   GET /api/v1/contacts
- * @desc    Get user contacts with pagination
- * @access  Private
- * @query   favorites=true/false, limit=50, offset=0
- */
-router.get('/', 
+router.get('/',
   validateQuery(getContactsSchema),
   contactController.getContacts
 );
 
 /**
- * @route   GET /api/v1/contacts/favorites
- * @desc    Get user favorite contacts
- * @access  Private
+ * Get user's favorite contacts
+ * @route GET /api/v1/contacts/favorites
+ * @access Private
  */
-router.get('/favorites', contactController.getFavoriteContacts);
+router.get('/favorites',
+  contactController.getFavoriteContacts
+);
 
 /**
- * @route   GET /api/v1/contacts/search
- * @desc    Search user contacts
- * @access  Private
- * @query   q=searchTerm, limit=20, offset=0
+ * Toggle favorite status for a contact
+ * @route POST /api/v1/contacts/:contactId/favorite/toggle
+ * @access Private
  */
-router.get('/search', 
+router.post('/:contactId/favorite/toggle',
+  contactController.toggleFavorite
+);
+
+/**
+ * Search through user contacts
+ * @route GET /api/v1/contacts/search
+ * @access Private
+ */
+router.get('/search',
   validateQuery(searchContactsSchema),
   contactController.searchContacts
-);
-
-/**
- * @route   GET /api/v1/contacts/sync/status
- * @desc    Get contact sync status for user
- * @access  Private
- */
-router.get('/sync/status', contactController.getSyncStatus);
-
-/**
- * @route   GET /api/v1/contacts/stats
- * @desc    Get contact statistics for user
- * @access  Private
- */
-router.get('/stats', contactController.getContactStats);
-
-/**
- * @route   POST /api/v1/contacts/:contactId/favorite/toggle
- * @desc    Toggle contact favorite status
- * @access  Private
- * @param   contactId - UUID of the contact
- */
-router.post('/:contactId/favorite/toggle', contactController.toggleFavorite);
-
-/**
- * @route   POST /api/v1/contacts/interaction
- * @desc    Update contact interaction timestamp
- * @access  Private
- * @body    { phoneNumber: string }
- */
-router.post('/interaction', 
-  validateBody(updateInteractionSchema),
-  contactController.updateInteraction
-);
-
-/**
- * @route   POST /api/v1/contacts/phone-mapping
- * @desc    Create phone mapping for current user
- * @access  Private
- * @body    { phoneNumber: string }
- */
-router.post('/phone-mapping', 
-  validateBody(createPhoneMappingSchema),
-  contactController.createPhoneMapping
-);
-
-/**
- * @route   POST /api/v1/contacts/bulk-insert
- * @desc    Bulk insert contacts (admin/testing)
- * @access  Private
- * @body    { contacts: object[], batchSize?: number }
- */
-router.post('/bulk-insert',
-  validateBody(Joi.object({
-    contacts: Joi.array().items(
-      Joi.object({
-        owner_id: Joi.string().uuid().optional(),
-        phone_hash: Joi.string().required(),
-        is_favorite: Joi.boolean().default(false),
-        linked_user_id: Joi.string().uuid().allow(null).optional()
-      })
-    ).min(1).max(10000).required(),
-    batchSize: Joi.number().integer().min(100).max(1000).optional()
-  })),
-  contactController.bulkInsertContacts
 );
 
 export default router; 

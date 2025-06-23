@@ -1,6 +1,6 @@
 import { validationResult } from 'express-validator';
 import BaseResponse from '../utils/baseResponse.js';
-import Joi from 'joi';
+import { z } from 'zod';
 
 class ValidationMiddleware {
   /**
@@ -128,226 +128,184 @@ class ValidationMiddleware {
 }
 
 /**
- * Middleware to validate request body using Joi schema
+ * Middleware to validate request body using Zod schema
  */
 const validateBody = (schema) => {
   return (req, res, next) => {
-    const { error, value } = schema.validate(req.body);
-    
-    if (error) {
-      const errors = error.details.map(detail => ({
-        field: detail.path.join('.'),
-        message: detail.message
-      }));
+    try {
+      const validatedData = schema.parse(req.body);
+      req.body = validatedData; // Use validated and cleaned data
+      next();
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const errors = error.errors.map(err => ({
+          field: err.path.join('.'),
+          message: err.message
+        }));
+        
+        return BaseResponse.validationError(res, errors, 'Validation failed');
+      }
       
-      return BaseResponse.validationError(res, errors, 'Validation failed');
+      return BaseResponse.error(res, 'Validation error', 400);
     }
-    
-    req.body = value; // Use validated and cleaned data
-    next();
   };
 };
 
 /**
- * Middleware to validate query parameters using Joi schema
+ * Middleware to validate query parameters using Zod schema
  */
 const validateQuery = (schema) => {
   return (req, res, next) => {
-    const { error, value } = schema.validate(req.query);
-    
-    if (error) {
-      const errors = error.details.map(detail => ({
-        field: detail.path.join('.'),
-        message: detail.message
-      }));
+    try {
+      const validatedData = schema.parse(req.query);
+      req.query = validatedData; // Use validated and cleaned data
+      next();
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const errors = error.errors.map(err => ({
+          field: err.path.join('.'),
+          message: err.message
+        }));
+        
+        return BaseResponse.validationError(res, errors, 'Query validation failed');
+      }
       
-      return BaseResponse.validationError(res, errors, 'Query validation failed');
+      return BaseResponse.error(res, 'Query validation error', 400);
     }
-    
-    req.query = value; // Use validated and cleaned data
-    next();
   };
 };
 
-// Validation schemas for authentication endpoints
+// ============================================================================
+// VALIDATION SCHEMAS - Authentication endpoints
+// ============================================================================
 
-export const checkAvailabilitySchema = Joi.object({
-  medium: Joi.string().valid('phone', 'email').required(),
-  value: Joi.alternatives().conditional('medium', {
-    is: 'phone',
-    then: Joi.string()
-      .pattern(/^(\+|%2B|\s)[1-9]\d{1,14}$/)
-      .required()
-      .custom((value, helpers) => {
-        // Normalize the phone number by converting space or %2B to +
-        let normalized = value.replace(/^(\s|%2B)/, '+');
-        
-        // Validate the normalized format
-        if (!/^\+[1-9]\d{1,14}$/.test(normalized)) {
-          return helpers.error('any.invalid');
-        }
-        
-        return normalized;
-      }, 'Phone number normalization'),
-    otherwise: Joi.string().email().required()
+// Helper functions for phone number normalization  
+const normalizePhoneNumber = (value) => {
+  if (!value) return value;
+  // Normalize the phone number by converting space or %2B to +
+  let normalized = value.replace(/^(\s|%2B)/, '+');
+  
+  // Validate the normalized format
+  if (!/^\+[1-9]\d{1,14}$/.test(normalized)) {
+    throw new Error('Invalid phone number format');
+  }
+  
+  return normalized;
+};
+
+// Helper phone number schema  
+const phoneNumberSchema = z.string()
+  .regex(/^(\+|%2B|\s)[1-9]\d{1,14}$/, 'Invalid phone number format')
+  .transform(normalizePhoneNumber);
+
+const sessionIdSchema = z.string()
+  .regex(/^seq_auth_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, 
+    'Invalid sequential auth session ID');
+
+const phoneChangeSessionIdSchema = z.string()
+  .regex(/^phone_change_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    'Invalid phone change session ID');
+
+const otpSchema = z.string().regex(/^\d{6}$/, 'OTP must be 6 digits');
+
+export const checkAvailabilitySchema = z.object({
+  medium: z.enum(['phone', 'email']),
+  value: z.string().refine((value, ctx) => {
+    const medium = ctx.parent.medium;
+    if (medium === 'phone') {
+      try {
+        normalizePhoneNumber(value);
+        return true;
+      } catch {
+        return false;
+      }
+    } else {
+      return z.string().email().safeParse(value).success;
+    }
+  }, 'Invalid value for selected medium').transform((value, ctx) => {
+    const medium = ctx.parent.medium;
+    if (medium === 'phone') {
+      return normalizePhoneNumber(value);
+    }
+    return value;
   })
 });
 
-export const loginSchema = Joi.object({
-  phoneNumber: Joi.string()
-    .pattern(/^(\+|%2B|\s)[1-9]\d{1,14}$/)
-    .optional()
-    .custom((value, helpers) => {
-      if (!value) return value;
-      
-      // Normalize the phone number by converting space or %2B to +
-      let normalized = value.replace(/^(\s|%2B)/, '+');
-      
-      // Validate the normalized format
-      if (!/^\+[1-9]\d{1,14}$/.test(normalized)) {
-        return helpers.error('any.invalid');
-      }
-      
-      return normalized;
-    }, 'Phone number normalization'),
-  email: Joi.string().email().optional()
-}).or('phoneNumber', 'email');
-
-export const refreshTokenSchema = Joi.object({
-  refreshToken: Joi.string().required()
+export const loginSchema = z.object({
+  phoneNumber: phoneNumberSchema.optional(),
+  email: z.string().email().optional()
+}).refine(data => data.phoneNumber || data.email, {
+  message: 'Either phoneNumber or email must be provided'
 });
 
-export const revokeDeviceSchema = Joi.object({
-  deviceId: Joi.string().uuid().optional()
+export const refreshTokenSchema = z.object({
+  refreshToken: z.string().min(1, 'Refresh token is required')
 });
 
-export const startVerificationSchema = Joi.object({
-  phoneNumber: Joi.string()
-    .pattern(/^(\+|%2B|\s)[1-9]\d{1,14}$/)
-    .required()
-    .custom((value, helpers) => {
-      // Normalize the phone number by converting space or %2B to +
-      let normalized = value.replace(/^(\s|%2B)/, '+');
-      
-      // Validate the normalized format
-      if (!/^\+[1-9]\d{1,14}$/.test(normalized)) {
-        return helpers.error('any.invalid');
-      }
-      
-      return normalized;
-    }, 'Phone number normalization'),
-  email: Joi.string().email().required()
+export const revokeDeviceSchema = z.object({
+  deviceId: z.string().uuid().optional()
 });
 
-export const sendVerificationOTPSchema = Joi.object({
-  sessionId: Joi.string().uuid().required(),
-  medium: Joi.string().valid('phone', 'email').required(),
-  channel: Joi.alternatives().conditional('medium', {
-    is: 'phone',
-    then: Joi.string().valid('whatsapp', 'sms').default('sms'),
-    otherwise: Joi.string().valid('email').default('email')
+export const startVerificationSchema = z.object({
+  phoneNumber: phoneNumberSchema,
+  email: z.string().email()
+});
+
+export const sendVerificationOTPSchema = z.object({
+  sessionId: z.string().uuid(),
+  medium: z.enum(['phone', 'email']),
+  channel: z.string().optional().transform((val, ctx) => {
+    const medium = ctx.parent.medium;
+    if (medium === 'phone') {
+      return val && ['whatsapp', 'sms'].includes(val) ? val : 'sms';
+    }
+    return 'email';
   })
 });
 
-export const verifyVerificationOTPSchema = Joi.object({
-  sessionId: Joi.string().uuid().required(),
-  medium: Joi.string().valid('phone', 'email').required(),
-  otp: Joi.string().pattern(/^\d{6}$/).required()
+export const verifyVerificationOTPSchema = z.object({
+  sessionId: z.string().uuid(),
+  medium: z.enum(['phone', 'email']),
+  otp: otpSchema
 });
 
-export const completeLoginSchema = Joi.object({
-  sessionId: Joi.string()
-    .pattern(/^seq_auth_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
-    .required()
-    .messages({
-      'string.pattern.base': '"sessionId" must be a valid sequential auth session ID'
-    })
+export const completeLoginSchema = z.object({
+  sessionId: sessionIdSchema
 });
 
-// NEW: Sequential Authentication Flow Schemas
-export const phoneLoginSchema = Joi.object({
-  phoneNumber: Joi.string()
-    .pattern(/^(\+|%2B|\s)[1-9]\d{1,14}$/)
-    .required()
-    .custom((value, helpers) => {
-      // Normalize the phone number by converting space or %2B to +
-      let normalized = value.replace(/^(\s|%2B)/, '+');
-      
-      // Validate the normalized format
-      if (!/^\+[1-9]\d{1,14}$/.test(normalized)) {
-        return helpers.error('any.invalid');
-      }
-      
-      return normalized;
-    }, 'Phone number normalization')
+// Sequential Authentication Flow Schemas
+export const phoneLoginSchema = z.object({
+  phoneNumber: phoneNumberSchema
 });
 
-export const phoneVerifySchema = Joi.object({
-  sessionId: Joi.string()
-    .pattern(/^seq_auth_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
-    .required()
-    .messages({
-      'string.pattern.base': '"sessionId" must be a valid sequential auth session ID'
-    }),
-  otp: Joi.string().pattern(/^\d{6}$/).required()
+export const phoneVerifySchema = z.object({
+  sessionId: sessionIdSchema,
+  otp: otpSchema
 });
 
-export const emailLoginSchema = Joi.object({
-  sessionId: Joi.string()
-    .pattern(/^seq_auth_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
-    .required()
-    .messages({
-      'string.pattern.base': '"sessionId" must be a valid sequential auth session ID'
-    }),
-  email: Joi.string().email().required()
+export const emailLoginSchema = z.object({
+  sessionId: sessionIdSchema,
+  email: z.string().email()
 });
 
-export const emailVerifySchema = Joi.object({
-  sessionId: Joi.string()
-    .pattern(/^seq_auth_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
-    .required()
-    .messages({
-      'string.pattern.base': '"sessionId" must be a valid sequential auth session ID'
-    }),
-  otp: Joi.string().pattern(/^\d{6}$/).required()
+export const emailVerifySchema = z.object({
+  sessionId: sessionIdSchema,
+  otp: otpSchema
 });
 
-// NEW: Phone Change Validation Schemas
-export const phoneChangeStartSchema = Joi.object({
-  newPhoneNumber: Joi.string()
-    .pattern(/^(\+|%2B|\s)[1-9]\d{1,14}$/)
-    .required()
-    .custom((value, helpers) => {
-      // Normalize the phone number by converting space or %2B to +
-      let normalized = value.replace(/^(\s|%2B)/, '+');
-      
-      // Validate the normalized format
-      if (!/^\+[1-9]\d{1,14}$/.test(normalized)) {
-        return helpers.error('any.invalid');
-      }
-      
-      return normalized;
-    }, 'Phone number normalization')
+// Phone Change Validation Schemas
+export const phoneChangeStartSchema = z.object({
+  newPhoneNumber: phoneNumberSchema
 });
 
-export const phoneChangeVerifyOldSchema = Joi.object({
-  sessionId: Joi.string()
-    .pattern(/^phone_change_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
-    .required()
-    .messages({
-      'string.pattern.base': '"sessionId" must be a valid phone change session ID'
-    }),
-  otp: Joi.string().pattern(/^\d{6}$/).required()
+export const phoneChangeVerifyOldSchema = z.object({
+  sessionId: phoneChangeSessionIdSchema,
+  otp: otpSchema
 });
 
-export const phoneChangeVerifyNewSchema = Joi.object({
-  sessionId: Joi.string()
-    .pattern(/^phone_change_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
-    .required()
-    .messages({
-      'string.pattern.base': '"sessionId" must be a valid phone change session ID'
-    }),
-  otp: Joi.string().pattern(/^\d{6}$/).required()
+export const phoneChangeVerifyNewSchema = z.object({
+  sessionId: phoneChangeSessionIdSchema,
+  otp: otpSchema
 });
 
 export { validateBody, validateQuery };
