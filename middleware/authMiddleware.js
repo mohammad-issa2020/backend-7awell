@@ -23,6 +23,54 @@ const authenticateToken = async (req, res, next) => {
     // Check for optional JWT in headers (for custom token recovery)
     const sessionJWT = req.headers['x-session-jwt'] || req.headers['session-jwt'];
 
+    // --- Custom session support ---
+    if (sessionToken.startsWith('stytch_session_')) {
+      if (!sessionJWT) {
+        return BaseResponse.unauthorized(res, 'Session JWT required for custom session', 'MISSING_SESSION_JWT');
+      }
+      let decoded;
+      try {
+        decoded = JSON.parse(Buffer.from(sessionJWT, 'base64').toString());
+      } catch (e) {
+        return BaseResponse.unauthorized(res, 'Invalid session JWT', 'INVALID_SESSION_JWT');
+      }
+      if (!decoded.expires_at || new Date(decoded.expires_at) < new Date()) {
+        return BaseResponse.unauthorized(res, 'Session expired', 'SESSION_EXPIRED');
+      }
+      // Simulate user object as in Stytch
+      req.user = {
+        stytchId: decoded.user_id,
+        phoneNumber: decoded.phone,
+        email: decoded.email,
+        created_at: decoded.created_at,
+        status: decoded.status,
+        session: {
+          session_id: decoded.session_id,
+          expires_at: decoded.expires_at
+        },
+        // Supabase user data will be filled by UserMappingService below
+        type: 'user'
+      };
+      // Get or create user in Supabase
+      const supabaseUser = await UserMappingService.createOrGetUser({
+        id: decoded.user_id,
+        phoneNumber: decoded.phone,
+        email: decoded.email,
+        created_at: decoded.created_at,
+        status: decoded.status
+      });
+      req.user.id = supabaseUser.id;
+      req.user.supabaseId = supabaseUser.id;
+      req.user.phone = supabaseUser.phone_number || supabaseUser.phone;
+      req.user.emailVerified = supabaseUser.email_verified;
+      req.user.phoneVerified = supabaseUser.phone_verified;
+      req.user.userStatus = supabaseUser.status;
+      req.user.lastLogin = supabaseUser.last_login_at;
+      req.sessionToken = sessionToken;
+      return next();
+    }
+    // --- End custom session support ---
+
     // Validate session with Stytch (pass JWT if available for custom token recovery)
     const validationResult = await authService.validateSession(sessionToken, sessionJWT);
     
