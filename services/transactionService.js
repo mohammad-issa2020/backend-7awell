@@ -1,4 +1,5 @@
 import { supabase } from '../database/supabase.js';
+import logger from '../utils/logger.js';
 
 // Transaction types mapping - matching database enum
 const TRANSACTION_TYPES = {
@@ -343,18 +344,46 @@ class TransactionService {
       } = transactionData;
 
       if (!userId) {
+        logger.warn('Transaction creation failed: User ID missing', {
+          transactionData: { ...transactionData, userId: '[REDACTED]' }
+        });
         throw new Error('User ID is required');
       }
 
       // Validate required fields
       if (!userId || !type || !amount || !assetSymbol || !network) {
+        logger.warn('Transaction creation failed: Missing required fields', {
+          userId,
+          missingFields: {
+            userId: !userId,
+            type: !type,
+            amount: !amount,
+            assetSymbol: !assetSymbol,
+            network: !network
+          }
+        });
         throw new Error('Missing required transaction fields');
       }
 
       // Validate transaction type
       if (!Object.values(TRANSACTION_TYPES).includes(type)) {
+        logger.warn('Transaction creation failed: Invalid transaction type', {
+          userId,
+          providedType: type,
+          validTypes: Object.values(TRANSACTION_TYPES)
+        });
         throw new Error(`Invalid transaction type: ${type}`);
       }
+
+      // Log transaction processing start
+      logger.logTransaction('Processing transaction creation', 'info', {
+        userId,
+        type,
+        amount,
+        assetSymbol,
+        network,
+        description
+      });
 
       // Generate reference manually
       const timestamp = Date.now().toString();
@@ -385,6 +414,15 @@ class TransactionService {
         status: TRANSACTION_STATUS.PENDING
       };
 
+      // Log database insertion attempt
+      logger.logDatabase('Inserting transaction into database', 'info', {
+        userId,
+        reference,
+        type,
+        amount: parseFloat(amount),
+        assetSymbol: assetSymbol.toUpperCase()
+      });
+
       const { data, error } = await supabase
         .from('transactions')
         .insert([transaction])
@@ -392,9 +430,23 @@ class TransactionService {
         .single();
 
       if (error) {
-        console.error('Database error in createTransaction:', error);
+        logger.logError('Database error in createTransaction', error, {
+          userId,
+          transactionData: transaction,
+          databaseError: error.message
+        });
         throw new Error(`Failed to create transaction: ${error.message}`);
       }
+
+      // Log successful database insertion
+      logger.logTransaction('Transaction successfully inserted into database', 'info', {
+        userId,
+        transactionId: data.id,
+        reference: data.reference,
+        type: data.type,
+        amount: data.amount,
+        status: data.status
+      });
 
       // Log transaction creation to activity system
       await this.logTransactionActivity(userId, 'transaction_created', {
@@ -405,10 +457,25 @@ class TransactionService {
         network
       });
 
+      // Log final success
+      logger.logTransaction('Transaction creation completed successfully', 'info', {
+        userId,
+        transactionId: data.id,
+        reference: data.reference,
+        executionTime: Date.now() - parseInt(timestamp)
+      });
+
       return data;
 
     } catch (error) {
-      console.error('TransactionService error in createTransaction:', error);
+      logger.logError('TransactionService error in createTransaction', error, {
+        userId: transactionData?.userId,
+        transactionType: transactionData?.type,
+        amount: transactionData?.amount,
+        assetSymbol: transactionData?.assetSymbol,
+        errorMessage: error.message,
+        stackTrace: error.stack
+      });
       throw new Error(`Failed to create transaction: ${error.message}`);
     }
   }

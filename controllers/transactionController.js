@@ -1,6 +1,7 @@
 import TransactionService, { TRANSACTION_TYPES, TRANSACTION_STATUS } from '../services/transactionService.js';
 import { createSuccessResponse, createErrorResponse } from '../utils/baseResponse.js';
 import { z } from "zod";
+import logger from '../utils/logger.js';
 
 // Transaction validation schema with proper type coercion
 const transactionSchema = z.object({
@@ -322,6 +323,11 @@ class TransactionController {
     try {
       const userId = req.user?.id;
       if (!userId) {
+        logger.logSecurity('Transaction creation attempt without authentication', 'warning', {
+          ip: req.ip,
+          userAgent: req.get('User-Agent'),
+          endpoint: '/api/v1/transactions'
+        });
         return res.status(401).json(createErrorResponse(
           'Authentication required',
           'UNAUTHORIZED',
@@ -340,6 +346,17 @@ class TransactionController {
         description,
         metadata = {}
       } = req.body;
+
+      // Log transaction creation start
+      logger.logTransaction('Transaction creation started', 'info', {
+        userId,
+        type,
+        amount,
+        assetSymbol,
+        network,
+        ip: req.ip,
+        userAgent: req.get('User-Agent')
+      });
 
       // Prepare data for validation
       const transactionData = {
@@ -360,6 +377,15 @@ class TransactionController {
       
       if (!parseResult.success) {
         const errors = parseResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
+        
+        // Log validation errors
+        logger.logTransaction('Transaction validation failed', 'warn', {
+          userId,
+          errors,
+          requestData: transactionData,
+          ip: req.ip
+        });
+        
         return res.status(400).json(createErrorResponse(
           `Validation failed: ${errors}`,
           'VALIDATION_ERROR',
@@ -373,7 +399,27 @@ class TransactionController {
       // Create transaction
       const transaction = await TransactionService.createTransaction(validatedData);
 
-      console.log(`✅ User ${userId} created transaction ${transaction.id} (${type} ${amount} ${assetSymbol})`);
+      // Log successful transaction creation
+      logger.logTransaction('Transaction created successfully', 'info', {
+        userId,
+        transactionId: transaction.id,
+        type: transaction.type,
+        amount: transaction.amount,
+        assetSymbol: transaction.asset_symbol,
+        reference: transaction.reference,
+        status: transaction.status,
+        ip: req.ip,
+        responseTime: new Date().toISOString()
+      });
+
+      // Also log user action
+      logger.logUserAction(userId, 'create_transaction', {
+        transactionId: transaction.id,
+        transactionType: type,
+        amount: `${amount} ${assetSymbol}`,
+        network,
+        ip: req.ip
+      });
 
       return res.status(201).json(createSuccessResponse(
         transaction,
@@ -381,7 +427,15 @@ class TransactionController {
       ));
 
     } catch (error) {
-      console.error('Error in createTransaction controller:', error);
+      // Log error with Winston
+      logger.logError('Failed to create transaction', error, {
+        userId: req.user?.id,
+        requestBody: req.body,
+        ip: req.ip,
+        userAgent: req.get('User-Agent'),
+        endpoint: '/api/v1/transactions'
+      });
+
       return res.status(500).json(createErrorResponse(
         'Failed to create transaction',
         'INTERNAL_SERVER_ERROR',

@@ -21,6 +21,11 @@ class Phone {
         throw new Error('Missing required field: linked_user_id');
       }
 
+      // Check if Supabase is available
+      if (!supabaseAdmin) {
+        throw new Error('Database connection not available');
+      }
+
       const { data: result, error } = await supabaseAdmin
         .from(this.table)
         .insert([{
@@ -31,6 +36,7 @@ class Phone {
         .single();
 
       if (error) {
+        console.error('❌ Supabase error creating phone record:', error);
         throw new Error(`Failed to create phone record: ${error.message}`);
       }
 
@@ -48,6 +54,15 @@ class Phone {
    */
   static async findByHash(phoneHash) {
     try {
+      if (!phoneHash) {
+        return null;
+      }
+
+      // Check if Supabase is available
+      if (!supabaseAdmin) {
+        throw new Error('Database connection not available');
+      }
+
       const { data, error } = await supabaseAdmin
         .from(this.table)
         .select('*')
@@ -55,6 +70,7 @@ class Phone {
         .single();
 
       if (error && error.code !== 'PGRST116') {
+        console.error('❌ Supabase error finding phone record:', error);
         throw new Error(`Failed to find phone record: ${error.message}`);
       }
 
@@ -72,12 +88,22 @@ class Phone {
    */
   static async findByUserId(userId) {
     try {
+      if (!userId) {
+        return [];
+      }
+
+      // Check if Supabase is available
+      if (!supabaseAdmin) {
+        throw new Error('Database connection not available');
+      }
+
       const { data, error } = await supabaseAdmin
         .from(this.table)
         .select('*')
         .eq('linked_user_id', userId);
 
       if (error) {
+        console.error('❌ Supabase error finding phone records:', error);
         throw new Error(`Failed to find phone records: ${error.message}`);
       }
 
@@ -96,6 +122,15 @@ class Phone {
    */
   static async update(phoneHash, updateData) {
     try {
+      if (!phoneHash || !updateData.linked_user_id) {
+        throw new Error('Missing required parameters for update');
+      }
+
+      // Check if Supabase is available
+      if (!supabaseAdmin) {
+        throw new Error('Database connection not available');
+      }
+
       const { data, error } = await supabaseAdmin
         .from(this.table)
         .update({
@@ -106,6 +141,7 @@ class Phone {
         .single();
 
       if (error) {
+        console.error('❌ Supabase error updating phone record:', error);
         throw new Error(`Failed to update phone record: ${error.message}`);
       }
 
@@ -123,12 +159,22 @@ class Phone {
    */
   static async delete(phoneHash) {
     try {
+      if (!phoneHash) {
+        throw new Error('Phone hash is required for deletion');
+      }
+
+      // Check if Supabase is available
+      if (!supabaseAdmin) {
+        throw new Error('Database connection not available');
+      }
+
       const { error } = await supabaseAdmin
         .from(this.table)
         .delete()
         .eq('phone_hash', phoneHash);
 
       if (error) {
+        console.error('❌ Supabase error deleting phone record:', error);
         throw new Error(`Failed to delete phone record: ${error.message}`);
       }
 
@@ -140,13 +186,22 @@ class Phone {
   }
 
   /**
-   * Link phone to user
+   * Link phone to user using RPC function
    * @param {string} phoneHash - Phone hash
    * @param {string} userId - User ID
-   * @returns {Object} Updated phone record
+   * @returns {Object} Result
    */
   static async linkToUser(phoneHash, userId) {
     try {
+      if (!phoneHash || !userId) {
+        throw new Error('Phone hash and user ID are required');
+      }
+
+      // Check if Supabase is available
+      if (!supabaseAdmin) {
+        throw new Error('Database connection not available');
+      }
+
       const { data, error } = await supabaseAdmin
         .rpc('link_phone_to_user', {
           p_phone_hash: phoneHash,
@@ -154,6 +209,7 @@ class Phone {
         });
 
       if (error) {
+        console.error('❌ Supabase RPC error linking phone to user:', error);
         throw new Error(`Failed to link phone to user: ${error.message}`);
       }
 
@@ -165,18 +221,28 @@ class Phone {
   }
 
   /**
-   * Unlink phone from user
+   * Unlink phone from user using RPC function
    * @param {string} phoneHash - Phone hash
    * @returns {boolean} Success status
    */
   static async unlinkFromUser(phoneHash) {
     try {
+      if (!phoneHash) {
+        throw new Error('Phone hash is required');
+      }
+
+      // Check if Supabase is available
+      if (!supabaseAdmin) {
+        throw new Error('Database connection not available');
+      }
+
       const { data, error } = await supabaseAdmin
         .rpc('unlink_phone_from_user', {
           p_phone_hash: phoneHash
         });
 
       if (error) {
+        console.error('❌ Supabase RPC error unlinking phone from user:', error);
         throw new Error(`Failed to unlink phone from user: ${error.message}`);
       }
 
@@ -188,22 +254,33 @@ class Phone {
   }
 
   /**
-   * Get user by phone hash
+   * Get user by phone hash using RPC function
    * @param {string} phoneHash - Phone hash
    * @returns {Object|null} User data
    */
   static async getUserByHash(phoneHash) {
     try {
+      if (!phoneHash) {
+        return null;
+      }
+
+      // Check if Supabase is available
+      if (!supabaseAdmin) {
+        throw new Error('Database connection not available');
+      }
+
       const { data, error } = await supabaseAdmin
         .rpc('get_user_by_phone_hash', {
           p_phone_hash: phoneHash
         });
 
       if (error) {
+        console.error('❌ Supabase RPC error getting user by phone hash:', error);
         throw new Error(`Failed to get user by phone hash: ${error.message}`);
       }
 
-      return data?.[0] || null;
+      // RPC returns an array, get first result
+      return data && data.length > 0 ? data[0] : null;
     } catch (error) {
       console.error('❌ Error getting user by phone hash:', error);
       throw error;

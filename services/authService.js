@@ -1,5 +1,6 @@
 import stytchClient from '../config/stytch.js';
 import { v4 as uuidv4 } from 'uuid';
+import logger from '../utils/logger.js';
 
 class AuthService {
   constructor() {
@@ -10,8 +11,6 @@ class AuthService {
     // In-memory rate limiting (simple implementation)
     this.rateLimitStore = new Map();
     this.otpAttempts = new Map();
-
-
 
     // Clean up rate limits every 5 minutes
     setInterval(() => {
@@ -27,13 +26,26 @@ class AuthService {
    */
   async refreshSession(session_token) {
     try {
+      logger.logAuth('Session refresh attempt', 'info', {
+        hasToken: !!session_token
+      });
+      
       const result = await stytchClient.sessions.authenticate({
         session_token: session_token
       });
 
       if (result.status_code !== 200) {
+        logger.logAuth('Session authentication failed', 'warn', {
+          statusCode: result.status_code,
+          reason: 'Invalid session token'
+        });
         throw new Error('Session authentication failed');
       }
+
+      logger.logAuth('Session refreshed successfully', 'info', {
+        userId: result.user.user_id,
+        sessionId: result.session?.session_id
+      });
 
       return {
         user: {
@@ -49,6 +61,10 @@ class AuthService {
       };
 
     } catch (error) {
+      logger.logError('Session refresh error', error, {
+        hasToken: !!session_token,
+        errorMessage: error.message
+      });
       throw new Error(`Session refresh error: ${error.message}`);
     }
   }
@@ -66,12 +82,25 @@ class AuthService {
 
       // Validate required fields
       if (!decoded.user_id || (!decoded.phone && !decoded.email)) {
+        logger.warn('Invalid JWT: Missing required fields', {
+          hasUserId: !!decoded.user_id,
+          hasPhone: !!decoded.phone,
+          hasEmail: !!decoded.email
+        });
         return null;
       }
 
+      logger.debug('JWT extracted successfully', {
+        userId: decoded.user_id,
+        hasPhone: !!decoded.phone,
+        hasEmail: !!decoded.email
+      });
+
       return decoded;
     } catch (error) {
-      console.error('Failed to extract user info from JWT:', error.message);
+      logger.logError('Failed to extract user info from JWT', error, {
+        hasJWT: !!session_jwt
+      });
       return null;
     }
   }
@@ -86,7 +115,9 @@ class AuthService {
     try {
       // Check if it's a custom verification token
       if (session_token.startsWith('stytch_verified_')) {
-        console.log('🔍 Validating custom verification token');
+        logger.logAuth('Validating custom verification token', 'info', {
+          tokenType: 'custom_verification'
+        });
 
         // Initialize customSessions if not exists
         this.customSessions = this.customSessions || new Map();
@@ -96,31 +127,47 @@ class AuthService {
 
         // If not in store but we have JWT, try to recover
         if (!storedInfo && session_jwt) {
-          console.log('🔄 Attempting to recover session from JWT');
+          logger.logAuth('Attempting to recover session from JWT', 'info', {
+            hasJWT: !!session_jwt
+          });
           const jwtInfo = this.extractUserInfoFromJWT(session_jwt);
 
           if (jwtInfo) {
             // Store the recovered info
             storedInfo = jwtInfo;
             this.customSessions.set(session_token, storedInfo);
-            console.log('✅ Session recovered from JWT');
+            logger.logAuth('Session recovered from JWT', 'info', {
+              userId: jwtInfo.user_id
+            });
           }
         }
 
         if (storedInfo) {
-          console.log('📋 Found stored session info');
-
           // Check if token is expired
           const expiresAt = new Date(storedInfo.expires_at).getTime();
           if (Date.now() > expiresAt) {
             this.customSessions.delete(session_token);
+            logger.logAuth('Custom verification token expired', 'warn', {
+              userId: storedInfo.user_id,
+              expiresAt: storedInfo.expires_at
+            });
             throw new Error('Custom verification token expired');
           }
 
           // Validate that we have required user info
           if (!storedInfo.user_id || (!storedInfo.phone && !storedInfo.email)) {
+            logger.logAuth('Invalid token: missing required user information', 'warn', {
+              hasUserId: !!storedInfo.user_id,
+              hasPhone: !!storedInfo.phone,
+              hasEmail: !!storedInfo.email
+            });
             throw new Error('Invalid token: missing required user information');
           }
+
+          logger.logAuth('Custom token validated successfully', 'info', {
+            userId: storedInfo.user_id,
+            tokenType: 'custom_verification'
+          });
 
           return {
             valid: true,
@@ -141,20 +188,32 @@ class AuthService {
         }
 
         // For custom tokens without stored data, we can't safely proceed
-        // because we need phone/email info for Supabase user creation
-        console.log('❌ No stored session info for custom token');
+        logger.logAuth('Custom verification token not found in session store', 'warn', {
+          tokenType: 'custom_verification'
+        });
         throw new Error('Custom verification token not found in session store. Please provide session_jwt or login again.');
       }
 
       // Handle regular Stytch tokens
-      console.log('🔍 Validating Stytch session token');
+      logger.logAuth('Validating Stytch session token', 'info', {
+        tokenType: 'stytch_session'
+      });
+      
       const result = await stytchClient.sessions.authenticate({
         session_token: session_token
       });
 
       if (result.status_code !== 200) {
+        logger.logAuth('Stytch session validation failed', 'warn', {
+          statusCode: result.status_code
+        });
         throw new Error('Invalid session');
       }
+
+      logger.logAuth('Stytch session validated successfully', 'info', {
+        userId: result.user.user_id,
+        sessionId: result.session?.session_id
+      });
 
       return {
         valid: true,
@@ -170,7 +229,10 @@ class AuthService {
       };
 
     } catch (error) {
-      console.error('Session validation error:', error.message);
+      logger.logError('Session validation error', error, {
+        tokenType: session_token?.startsWith('stytch_verified_') ? 'custom' : 'stytch',
+        errorMessage: error.message
+      });
       return {
         valid: false,
         error: error.message
@@ -185,19 +247,26 @@ class AuthService {
    */
   async getUserSessions(stytch_user_id) {
     try {
-      console.log(`🔍 Getting sessions for Stytch user: ${stytch_user_id}`);
+      logger.logAuth('Getting sessions for Stytch user', 'info', {
+        userId: stytch_user_id
+      });
 
       // Get user data from Stytch which includes sessions
       const result = await stytchClient.users.get({
         user_id: stytch_user_id
       });
 
-      console.log(`📊 Found ${result.sessions?.length || 0} sessions for user`);
+      logger.logAuth('Found sessions', 'info', {
+        sessionCount: result.sessions?.length || 0
+      });
 
       // Sessions are in the user object
       return result.sessions || [];
     } catch (error) {
-      console.error(`❌ Error getting user sessions: ${error.message}`);
+      logger.logError('Error getting user sessions', error, {
+        userId: stytch_user_id,
+        errorMessage: error.message
+      });
       throw new Error(`Error retrieving sessions: ${error.message}`);
     }
   }
@@ -225,21 +294,30 @@ class AuthService {
    */
   async revokeAllSessions(stytch_user_id) {
     try {
-      console.log(`🔄 Revoking all sessions for Stytch user: ${stytch_user_id}`);
+      logger.logAuth('Revoking all sessions for Stytch user', 'info', {
+        userId: stytch_user_id
+      });
 
       // Get all user sessions first
       const sessions = await this.getUserSessions(stytch_user_id);
 
-      console.log(`📋 Found ${sessions.length} sessions to revoke`);
+      logger.logAuth('Found sessions to revoke', 'info', {
+        sessionCount: sessions.length
+      });
 
       for (const session of sessions) {
         await this.revokeSession(session.session_id);
       }
 
-      console.log(`✅ Successfully revoked all sessions`);
+      logger.logAuth('Successfully revoked all sessions', 'info', {
+        userId: stytch_user_id
+      });
       return true;
     } catch (error) {
-      console.error(`❌ Error revoking all sessions: ${error.message}`);
+      logger.logError('Error revoking all sessions', error, {
+        userId: stytch_user_id,
+        errorMessage: error.message
+      });
       throw new Error(`Error revoking all sessions: ${error.message}`);
     }
   }
@@ -295,7 +373,9 @@ class AuthService {
     }
 
     if (cleaned > 0) {
-      console.log(`🧹 Cleaned up ${cleaned} expired entries`);
+      logger.logAuth('Cleaned up expired entries', 'info', {
+        cleanedCount: cleaned
+      });
     }
   }
 
@@ -322,7 +402,6 @@ class AuthService {
     return rateLimit.count >= this.OTP_RATE_LIMIT;
   }
 
-
   /**
    * Update rate limit for a key
    * @param {string} key - Rate limit key
@@ -347,7 +426,10 @@ class AuthService {
 
   async checkAvailability(medium, value) {
     try {
-      console.log(`🔍 Checking availability for ${medium}: ${value}`);
+      logger.logAuth('Checking availability for medium', 'info', {
+        medium: medium,
+        value: value
+      });
 
       if (medium === 'phone') {
         // Use search API for phone numbers
@@ -368,10 +450,10 @@ class AuthService {
           const hasResults = result && result.results && Array.isArray(result.results);
           const resultCount = hasResults ? result.results.length : 0;
 
-          console.log(`📊 Phone search result:`, {
+          logger.logAuth('Phone search result', 'info', {
             found: resultCount > 0,
             count: resultCount,
-            hasResults
+            hasResults: hasResults
           });
 
           return {
@@ -383,11 +465,13 @@ class AuthService {
               'Phone number is available'
           };
         } catch (stytchError) {
-          console.error(`❌ Stytch search error: ${stytchError.message}`);
+          logger.logError('Stytch search error', stytchError, {
+            errorMessage: stytchError.message
+          });
           
           // If Stytch search fails, assume phone is available for new registration
           // This is a fallback to prevent blocking the authentication flow
-          console.log('🔄 Falling back to assuming phone is available due to search error');
+          logger.logAuth('Falling back to assuming phone is available due to search error', 'info');
           
           return {
             available: true,
@@ -400,7 +484,7 @@ class AuthService {
       } else if (medium === 'email') {
         // For email, we'll skip the availability check since Stytch doesn't support email search filters
         // We'll let Stytch handle the duplicate email check during the actual OTP send process
-        console.log(`📧 Skipping email availability check - will be handled by Stytch during OTP send`);
+        logger.logAuth('Skipping email availability check - will be handled by Stytch during OTP send', 'info');
 
         return {
           available: true, // We assume it's available and let Stytch handle duplicates
@@ -414,7 +498,11 @@ class AuthService {
       }
 
     } catch (error) {
-      console.error(`❌ Error checking availability: ${error.message}`);
+      logger.logError('Error checking availability', error, {
+        medium: medium,
+        value: value,
+        errorMessage: error.message
+      });
       
       // For any other errors, provide a fallback response
       return {
@@ -433,7 +521,9 @@ class AuthService {
    */
   async sendPhoneOTP(phoneNumber) {
     try {
-      console.log('📱 Sending WhatsApp OTP to:', phoneNumber);
+      logger.logAuth('Sending WhatsApp OTP to', 'info', {
+        phoneNumber: phoneNumber
+      });
 
       // Try WhatsApp first (better international coverage)
       const result = await stytchClient.otps.whatsapp.send({
@@ -445,7 +535,9 @@ class AuthService {
         throw new Error('Failed to send WhatsApp OTP');
       }
 
-      console.log('✅ WhatsApp OTP sent successfully');
+      logger.logAuth('WhatsApp OTP sent successfully', 'info', {
+        phoneNumber: phoneNumber
+      });
       // WhatsApp returns phone_id, we need to map it to method_id for consistency
       return {
         ...result,
@@ -453,11 +545,14 @@ class AuthService {
         method_id: result.phone_id // Map phone_id to method_id for authenticate
       };
     } catch (error) {
-      console.error('❌ WhatsApp OTP failed:', error.message);
+      logger.logError('WhatsApp OTP failed', error, {
+        phoneNumber: phoneNumber,
+        errorMessage: error.message
+      });
 
       // Fallback to SMS if WhatsApp fails
       try {
-        console.log('🔄 Falling back to SMS...');
+        logger.logAuth('Falling back to SMS...', 'info');
         const smsResult = await stytchClient.otps.sms.send({
           phone_number: phoneNumber,
           expiration_minutes: Math.floor(this.OTP_EXPIRY / 60)
@@ -467,7 +562,9 @@ class AuthService {
           throw new Error('Failed to send SMS OTP');
         }
 
-        console.log('✅ SMS OTP sent as fallback');
+        logger.logAuth('SMS OTP sent as fallback', 'info', {
+          phoneNumber: phoneNumber
+        });
         // SMS returns phone_id, we need to map it to method_id for consistency
         return {
           ...smsResult,
@@ -475,17 +572,20 @@ class AuthService {
           method_id: smsResult.phone_id // Map phone_id to method_id for authenticate
         };
       } catch (smsError) {
-        console.error('❌ SMS fallback also failed:', smsError.message);
+        logger.logError('SMS fallback also failed', smsError, {
+          phoneNumber: phoneNumber,
+          errorMessage: smsError.message
+        });
         throw new Error(`Failed to send OTP via WhatsApp or SMS: ${error.message}`);
       }
     }
   }
 
   /**
- * Send OTP to email
- * @param {string} email - Email address
- * @returns {Object} Stytch response with method_id
- */
+   * Send OTP to email
+   * @param {string} email - Email address
+   * @returns {Object} Stytch response with method_id
+   */
   async sendEmailOTP(email) {
     try {
       const result = await stytchClient.otps.email.send({
@@ -497,7 +597,9 @@ class AuthService {
         throw new Error('Failed to send email OTP');
       }
 
-      console.log('✅ Email OTP sent successfully');
+      logger.logAuth('Email OTP sent successfully', 'info', {
+        email: email
+      });
       // Email returns email_id, we need to map it to method_id for consistency
       return {
         ...result,
@@ -507,8 +609,6 @@ class AuthService {
       throw new Error(`Email OTP error: ${error.message}`);
     }
   }
-
-
 
   /**
    * Clean up expired authentication sessions
@@ -544,7 +644,9 @@ class AuthService {
    */
   async startPhoneLogin(phoneNumber) {
     try {
-      console.log('📱 Starting phone login for:', phoneNumber);
+      logger.logAuth('Starting phone login for', 'info', {
+        phoneNumber: phoneNumber
+      });
 
       // Check rate limiting
       if (this.isRateLimited(phoneNumber)) {
@@ -552,11 +654,11 @@ class AuthService {
       }
 
       // Check phone availability
-      console.log('🔍 Checking phone availability...');
+      logger.logAuth('Checking phone availability...', 'info');
       const phoneAvailability = await this.checkAvailability('phone', phoneNumber);
 
       // Send OTP to phone
-      console.log('📤 Sending phone OTP...');
+      logger.logAuth('Sending phone OTP...', 'info');
       const phoneResult = await this.sendPhoneOTP(phoneNumber);
 
       // Create session
@@ -586,7 +688,9 @@ class AuthService {
       // Update rate limiting
       this.updateRateLimit(phoneNumber);
 
-      console.log('✅ Phone login session created:', sessionId);
+      logger.logAuth('Phone login session created', 'info', {
+        sessionId: sessionId
+      });
 
       return {
         sessionId,
@@ -599,7 +703,10 @@ class AuthService {
       };
 
     } catch (error) {
-      console.error('❌ Phone login error:', error);
+      logger.logError('Phone login error', error, {
+        phoneNumber: phoneNumber,
+        errorMessage: error.message
+      });
       throw new Error(`Phone login failed: ${error.message}`);
     }
   }
@@ -612,7 +719,9 @@ class AuthService {
    */
   async verifyPhoneOTP(sessionId, otp) {
     try {
-      console.log('🔐 Verifying phone OTP for session:', sessionId);
+      logger.logAuth('Verifying phone OTP for session', 'info', {
+        sessionId: sessionId
+      });
 
       // Initialize if not exists
       this.sequentialAuthSessions = this.sequentialAuthSessions || new Map();
@@ -642,7 +751,9 @@ class AuthService {
 
       // Verify phone OTP with Stytch - using unified authenticate method
       try {
-        console.log(`🔐 Verifying OTP using ${session.phoneMethodType} method...`);
+        logger.logAuth('Verifying OTP using phone method', 'info', {
+          methodType: session.phoneMethodType
+        });
 
         // Stytch uses a single authenticate method for all OTP types
         const phoneResult = await stytchClient.otps.authenticate({
@@ -654,7 +765,9 @@ class AuthService {
           throw new Error('Invalid OTP');
         }
 
-        console.log(`✅ ${session.phoneMethodType.toUpperCase()} OTP verified successfully`);
+        logger.logAuth('Phone OTP verified successfully', 'info', {
+          methodType: session.phoneMethodType
+        });
 
         // Update session
         session.phoneVerified = true;
@@ -678,7 +791,10 @@ class AuthService {
       }
 
     } catch (error) {
-      console.error('❌ Phone OTP verification error:', error);
+      logger.logError('Phone OTP verification error', error, {
+        sessionId: sessionId,
+        errorMessage: error.message
+      });
       throw new Error(`Phone OTP verification failed: ${error.message}`);
     }
   }
@@ -691,7 +807,10 @@ class AuthService {
    */
   async startEmailLogin(sessionId, email) {
     try {
-      console.log('📧 Starting email login for session:', sessionId, 'email:', email);
+      logger.logAuth('Starting email login for session', 'info', {
+        sessionId: sessionId,
+        email: email
+      });
 
       // Initialize if not exists
       this.sequentialAuthSessions = this.sequentialAuthSessions || new Map();
@@ -719,11 +838,11 @@ class AuthService {
       }
 
       // Check email availability
-      console.log('🔍 Checking email availability...');
+      logger.logAuth('Checking email availability...', 'info');
       const emailAvailability = await this.checkAvailability('email', email);
 
       // Send OTP to email
-      console.log('📤 Sending email OTP...');
+      logger.logAuth('Sending email OTP...', 'info');
       const emailResult = await this.sendEmailOTP(email);
 
       // Update session
@@ -733,7 +852,9 @@ class AuthService {
       session.stytchEmailId = emailResult.method_id; // Use method_id for authenticate
       this.sequentialAuthSessions.set(sessionId, session);
 
-      console.log('✅ Email OTP sent for session:', sessionId);
+      logger.logAuth('Email OTP sent for session', 'info', {
+        sessionId: sessionId
+      });
 
       return {
         sessionId,
@@ -745,7 +866,10 @@ class AuthService {
       };
 
     } catch (error) {
-      console.error('❌ Email login error:', error);
+      logger.logError('Email login error', error, {
+        sessionId: sessionId,
+        errorMessage: error.message
+      });
       throw new Error(`Email login failed: ${error.message}`);
     }
   }
@@ -758,7 +882,9 @@ class AuthService {
    */
   async verifyEmailOTP(sessionId, otp) {
     try {
-      console.log('🔐 Verifying email OTP for session:', sessionId);
+      logger.logAuth('Verifying email OTP for session', 'info', {
+        sessionId: sessionId
+      });
 
       // Initialize if not exists
       this.sequentialAuthSessions = this.sequentialAuthSessions || new Map();
@@ -793,7 +919,7 @@ class AuthService {
 
       // Verify email OTP with Stytch
       try {
-        console.log('🔐 Verifying email OTP...');
+        logger.logAuth('Verifying email OTP', 'info');
 
         const emailResult = await stytchClient.otps.authenticate({
           method_id: session.stytchEmailId,
@@ -804,7 +930,7 @@ class AuthService {
           throw new Error('Invalid OTP');
         }
 
-        console.log('✅ Email OTP verified successfully');
+        logger.logAuth('Email OTP verified successfully', 'info');
 
         // Update session to mark email as verified
         session.emailVerified = true;
@@ -812,7 +938,7 @@ class AuthService {
         session.stytchUser = emailResult.user;
         this.sequentialAuthSessions.set(sessionId, session);
 
-        console.log('📋 Email verification completed, ready for login completion');
+        logger.logAuth('Email verification completed, ready for login completion', 'info');
 
         return {
           sessionId,
@@ -831,7 +957,10 @@ class AuthService {
       }
 
     } catch (error) {
-      console.error('❌ Email OTP verification error:', error);
+      logger.logError('Email OTP verification error', error, {
+        sessionId: sessionId,
+        errorMessage: error.message
+      });
       throw new Error(`Email OTP verification failed: ${error.message}`);
     }
   }
@@ -843,7 +972,9 @@ class AuthService {
    */
   async completeLogin(sessionId) {
     try {
-      console.log('🎉 Completing login for session:', sessionId);
+      logger.logAuth('Completing login for session', 'info', {
+        sessionId: sessionId
+      });
 
       // Initialize if not exists
       this.sequentialAuthSessions = this.sequentialAuthSessions || new Map();
@@ -877,7 +1008,7 @@ class AuthService {
 
       // Create Stytch session
       try {
-        console.log('🔑 Creating Stytch session...');
+        logger.logAuth('Creating Stytch session', 'info');
 
         // For the current Stytch version, we need to use a different approach
         // Since sessions.create is not available, we'll use the existing user session
@@ -887,7 +1018,7 @@ class AuthService {
         
         // Check if we already have a session token from the verification process
         if (session.stytchUser.session_token) {
-          console.log('📋 Using existing session token');
+          logger.logAuth('Using existing session token', 'info');
           // Use existing session token
           stytchSession = {
             session_token: session.stytchUser.session_token,
@@ -898,7 +1029,7 @@ class AuthService {
             }
           };
         } else {
-          console.log('🆕 Creating custom session token');
+          logger.logAuth('Creating custom session token', 'info');
           // Create a new session using the user's existing session or create a custom one
           // For now, we'll create a custom session since Stytch sessions.create is not available
           const sessionToken = `stytch_session_${session.stytchUser.user_id}_${Date.now()}`;
@@ -923,12 +1054,12 @@ class AuthService {
           };
         }
 
-        console.log('✅ Stytch session created successfully');
+        logger.logAuth('Stytch session created successfully', 'info');
 
         const stytchUser = session.stytchUser;
 
         // Create or get user in Supabase
-        console.log('💾 Creating/updating user in Supabase...');
+        logger.logAuth('Creating/updating user in Supabase', 'info');
         const UserMappingService = (await import('../services/userMappingService.js')).default;
         const supabaseUser = await UserMappingService.createOrGetUser({
           id: stytchUser.user_id,
@@ -941,7 +1072,7 @@ class AuthService {
         // Clean up session
         this.sequentialAuthSessions.delete(sessionId);
 
-        console.log('🎊 Sequential login completed successfully');
+        logger.logAuth('Sequential login completed successfully', 'info');
 
         return {
           user: {
@@ -967,7 +1098,10 @@ class AuthService {
       }
 
     } catch (error) {
-      console.error('❌ Login completion error:', error);
+      logger.logError('Login completion error', error, {
+        sessionId: sessionId,
+        errorMessage: error.message
+      });
       throw new Error(`Login completion failed: ${error.message}`);
     }
   }
@@ -982,7 +1116,10 @@ class AuthService {
    */
   async startPhoneChange(userId, newPhoneNumber) {
     try {
-      console.log('📱 Starting phone change for user:', userId, 'to:', newPhoneNumber);
+      logger.logAuth('Starting phone change for user', 'info', {
+        userId: userId,
+        newPhoneNumber: newPhoneNumber
+      });
 
       // Get user's current phone number from Supabase
       const UserMappingService = (await import('../services/userMappingService.js')).default;
@@ -1012,7 +1149,9 @@ class AuthService {
       }
 
       // Send OTP to current phone for verification
-      console.log('📤 Sending OTP to current phone:', currentPhoneNumber);
+      logger.logAuth('Sending OTP to current phone', 'info', {
+        currentPhoneNumber: currentPhoneNumber
+      });
       const currentPhoneOTPResult = await this.sendPhoneOTP(currentPhoneNumber);
 
       // Create phone change session
@@ -1043,7 +1182,9 @@ class AuthService {
       // Update rate limiting
       this.updateRateLimit(rateLimitKey);
 
-      console.log('✅ Phone change session created:', sessionId);
+      logger.logAuth('Phone change session created', 'info', {
+        sessionId: sessionId
+      });
 
       return {
         sessionId,
@@ -1055,7 +1196,11 @@ class AuthService {
       };
 
     } catch (error) {
-      console.error('❌ Phone change start error:', error);
+      logger.logError('Phone change start error', error, {
+        userId: userId,
+        newPhoneNumber: newPhoneNumber,
+        errorMessage: error.message
+      });
       throw new Error(`Phone change start failed: ${error.message}`);
     }
   }
@@ -1069,7 +1214,10 @@ class AuthService {
    */
   async verifyOldPhoneOTP(userId, sessionId, otp) {
     try {
-      console.log('🔐 Verifying old phone OTP for user:', userId, 'session:', sessionId);
+      logger.logAuth('Verifying old phone OTP for user', 'info', {
+        userId: userId,
+        sessionId: sessionId
+      });
 
       // Initialize if not exists
       this.phoneChangeSessions = this.phoneChangeSessions || new Map();
@@ -1104,7 +1252,9 @@ class AuthService {
 
       // Verify current phone OTP with Stytch - using unified authenticate method
       try {
-        console.log(`🔐 Verifying current phone OTP using ${session.currentPhoneMethodType} method...`);
+        logger.logAuth('Verifying current phone OTP using phone method', 'info', {
+          methodType: session.currentPhoneMethodType
+        });
 
         // Stytch uses a single authenticate method for all OTP types
         const currentPhoneResult = await stytchClient.otps.authenticate({
@@ -1116,10 +1266,14 @@ class AuthService {
           throw new Error('Invalid OTP');
         }
 
-        console.log(`✅ Current phone ${session.currentPhoneMethodType.toUpperCase()} OTP verified successfully`);
+        logger.logAuth('Current phone OTP verified successfully', 'info', {
+          methodType: session.currentPhoneMethodType
+        });
 
         // Send OTP to new phone
-        console.log('📤 Sending OTP to new phone:', session.newPhoneNumber);
+        logger.logAuth('Sending OTP to new phone', 'info', {
+          newPhoneNumber: session.newPhoneNumber
+        });
         const newPhoneOTPResult = await this.sendPhoneOTP(session.newPhoneNumber);
 
         // Update session
@@ -1147,7 +1301,11 @@ class AuthService {
       }
 
     } catch (error) {
-      console.error('❌ Old phone OTP verification error:', error);
+      logger.logError('Old phone OTP verification error', error, {
+        userId: userId,
+        sessionId: sessionId,
+        errorMessage: error.message
+      });
       throw new Error(`Old phone OTP verification failed: ${error.message}`);
     }
   }
@@ -1161,7 +1319,10 @@ class AuthService {
    */
   async verifyNewPhoneOTPAndComplete(userId, sessionId, otp) {
     try {
-      console.log('🎊 Completing phone change for user:', userId, 'session:', sessionId);
+      logger.logAuth('Completing phone change for user', 'info', {
+        userId: userId,
+        sessionId: sessionId
+      });
 
       // Initialize if not exists
       this.phoneChangeSessions = this.phoneChangeSessions || new Map();
@@ -1201,7 +1362,9 @@ class AuthService {
 
       // Verify new phone OTP with Stytch - using unified authenticate method
       try {
-        console.log(`🔐 Verifying new phone OTP using ${session.newPhoneMethodType} method...`);
+        logger.logAuth('Verifying new phone OTP using phone method', 'info', {
+          methodType: session.newPhoneMethodType
+        });
 
         // Stytch uses a single authenticate method for all OTP types
         const newPhoneResult = await stytchClient.otps.authenticate({
@@ -1213,10 +1376,12 @@ class AuthService {
           throw new Error('Invalid OTP');
         }
 
-        console.log(`✅ New phone ${session.newPhoneMethodType.toUpperCase()} OTP verified successfully`);
+        logger.logAuth('New phone OTP verified successfully', 'info', {
+          methodType: session.newPhoneMethodType
+        });
 
         // Both phones verified - update user's phone number in Stytch
-        console.log('🔄 Updating phone number in Stytch...');
+        logger.logAuth('Updating phone number in Stytch', 'info');
 
         // Get user's Stytch ID
         const UserMappingService = (await import('../services/userMappingService.js')).default;
@@ -1233,7 +1398,7 @@ class AuthService {
         });
 
         // Update phone number in Supabase
-        console.log('💾 Updating phone number in Supabase...');
+        logger.logAuth('Updating phone number in Supabase', 'info');
         await UserMappingService.updateUserPhone(userId, session.newPhoneNumber);
 
         // Log activity
@@ -1252,7 +1417,7 @@ class AuthService {
         // Clean up session
         this.phoneChangeSessions.delete(sessionId);
 
-        console.log('🎉 Phone change completed successfully');
+        logger.logAuth('Phone change completed successfully', 'info');
 
         return {
           success: true,
@@ -1271,7 +1436,11 @@ class AuthService {
       }
 
     } catch (error) {
-      console.error('❌ Phone change completion error:', error);
+      logger.logError('Phone change completion error', error, {
+        userId: userId,
+        sessionId: sessionId,
+        errorMessage: error.message
+      });
       throw new Error(`Phone change completion failed: ${error.message}`);
     }
   }

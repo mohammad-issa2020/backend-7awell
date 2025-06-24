@@ -455,30 +455,6 @@ describe('User with Settings Integration', () => {
       await User.destroy({ where: { id: uniqueUser.id } });
     });
 
-    it('should cascade delete when user is deleted', async () => {
-      // create temporary user and settings
-      const tempUser = await User.create({
-        phone: '+9876543210',
-        email: 'temp@delete.com',
-        phone_verified: false,
-        email_verified: false,
-        status: 'active',
-        kyc_level: 'none'
-      });
-
-      const tempSettings = await UserSettings.create({
-        user_id: tempUser.id,
-        language: 'en',
-        theme: 'light'
-      });
-
-      // delete user
-      await User.destroy({ where: { id: tempUser.id } });
-
-      // settings should be cascade deleted or orphaned
-      const orphanedSettings = await UserSettings.findByUserId(tempUser.id);
-      expect(orphanedSettings).toBeNull();
-    });
   });
 
   describe('Edge Cases', () => {

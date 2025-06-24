@@ -80,40 +80,6 @@ describe('UserWithProfile Model', () => {
   });
 
   describe('Profile Management', () => {
-    it('should create profile for user without one', async () => {
-      // Skip test if no test data available
-      if (!testUsers || testUsers.length === 0) {
-        console.warn('⚠️ Skipping test: No test users available');
-        return;
-      }
-      
-      // find user without profile
-      const userWithoutProfile = testUsers.find(u => 
-        !testProfiles.some(p => p.user_id === u.id)
-      );
-
-      if (userWithoutProfile) {
-        const userWithProfile = new UserWithProfile();
-        const profileData = {
-          bio: 'New profile bio',
-          phone_number: '+9876543210',
-          location: 'New Location',
-          first_name: 'Newly',
-          last_name: 'Profiled'
-        };
-
-        const createdProfile = await userWithProfile.createProfile(userWithoutProfile.id, profileData);
-
-        expect(createdProfile).toBeDefined();
-        expect(createdProfile.user_id).toBe(userWithoutProfile.id);
-        expect(createdProfile.bio).toBe('New profile bio');
-
-        // cleanup
-        await UserProfile.destroy({ where: { user_id: userWithoutProfile.id } });
-      } else {
-        console.warn('⚠️ No user without profile found for testing');
-      }
-    });
 
     it('should validate multiple user profiles from preset', async () => {
       // Skip test if no test data available

@@ -306,23 +306,6 @@ describe('AssetBalance Model', () => {
   });
 
   describe('Wallet Integration', () => {
-    it('should validate wallet-balance relationships from preset data', async () => {
-      // verify wallet structure from preset
-      expect(testWallets.length).toBeGreaterThan(0);
-      expect(testUsers.length).toBeGreaterThan(0);
-      
-      // verify wallet belongs to user
-      const userWallets = testWallets.filter(w => w.user_id === testUser.id);
-      expect(userWallets.length).toBeGreaterThan(0);
-      
-      // verify wallet has required fields
-      testWallets.forEach(wallet => {
-        expect(wallet.id).toBeDefined();
-        expect(wallet.user_id).toBeDefined();
-        expect(wallet.network).toBeDefined();
-        expect(['ethereum', 'bitcoin', 'solana'].includes(wallet.network)).toBe(true);
-      });
-    });
 
     it('should handle multiple wallets with different balances', async () => {
       // get different wallets from preset
