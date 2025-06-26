@@ -7,45 +7,46 @@ import morgan from 'morgan';
 import apiRoutes from './routes/index.js';
 import BaseResponse, { createSuccessResponse, createErrorResponse } from './utils/baseResponse.js';
 
-// Import Winston logging
+// Import Enhanced logging system
 import logger from './utils/logger.js';
-import { 
-  winstonMorgan, 
-  winstonLoggingMiddleware, 
-  errorLoggingMiddleware,
-  authLoggingMiddleware,
-  transactionLoggingMiddleware 
-} from './middleware/winstonMiddleware.js';
+import { correlationMiddleware } from './src/logger/correlation.js';
+import { httpLogger, detailedLoggingMiddleware, securityLoggingMiddleware } from './src/logger/middleware.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// =================== CRITICAL: Correlation tracking MUST be first ===================
+app.use(correlationMiddleware);
 
 // Middleware
 app.use(helmet()); // Security headers
 app.use(cors()); // Enable CORS
 
-// Winston logging middleware
-app.use(winstonMorgan); // HTTP request logging through Winston
-app.use(winstonLoggingMiddleware({
-  logRequests: true,
-  logResponses: true,
-  includeBody: process.env.NODE_ENV === 'development',
-  excludePaths: ['/health', '/ping', '/favicon.ico']
-}));
-
-// Specific logging middleware
-app.use(authLoggingMiddleware);
-app.use(transactionLoggingMiddleware);
+// Enhanced logging middleware
+app.use(httpLogger); // HTTP request/response logging
+app.use(detailedLoggingMiddleware()); // Detailed request logging
+app.use(securityLoggingMiddleware); // Security monitoring
 
 app.use(express.json({ limit: '10mb' })); // Parse JSON bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
 // Root route
 app.get('/', (req, res) => {
+  logger.info('Root endpoint accessed', {
+    category: 'api',
+    endpoint: '/',
+    userAgent: req.get('User-Agent')
+  });
+  
   res.json({
-    message: 'Welcome to Express.js Backend!',
-    version: '1.0.0',
+    message: 'Welcome to Enhanced Express.js Backend!',
+    version: '2.0.0',
     status: 'Running',
+    features: {
+      enhancedLogging: true,
+      correlationTracking: true,
+      structuredLogs: true
+    },
     api: {
       base: '/api',
       documentation: 'Check README.md for complete API documentation'
@@ -56,17 +57,15 @@ app.get('/', (req, res) => {
 // API routes
 app.use('/api', apiRoutes);
 
-// Winston error logging middleware
-app.use(errorLoggingMiddleware);
-
 // Global error handling middleware
 app.use((err, req, res, next) => {
-  // Log error using Winston (already logged by errorLoggingMiddleware, but this ensures it's logged)
+  // Log error using enhanced logger
   logger.logError(err, {
     url: req.originalUrl,
     method: req.method,
-    statusCode: err.status || 500
-  }, req.user?.id, req);
+    statusCode: err.status || 500,
+    category: 'error'
+  });
   
   return BaseResponse.error(
     res, 
@@ -86,30 +85,52 @@ app.use('*', (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-  const startupMessage = `🚀 Server is running on port ${PORT}`;
+  const startupMessage = `🚀 Enhanced server started successfully`;
   const apiInfo = {
     port: PORT,
     apiUrl: `http://localhost:${PORT}/api`,
-    healthCheck: `http://localhost:${PORT}/api/health`,
-    testEndpoints: `http://localhost:${PORT}/api/tests`,
+    healthCheck: `http://localhost:${PORT}/health`,
     environment: process.env.NODE_ENV || 'development',
-    logLevel: process.env.LOG_LEVEL || 'info'
+    logLevel: process.env.LOG_LEVEL || 'debug',
+    nodeVersion: process.version,
+    enhancedLogging: true,
+    correlationTracking: true
   };
 
-  // Log to Winston
+  // Log startup with enhanced logger
   logger.info(startupMessage, {
     category: 'startup',
     ...apiInfo
   });
 
-  // Also log to console for immediate feedback
-  console.log(startupMessage);
-  console.log(`📱 API Base URL: ${apiInfo.apiUrl}`);
-  console.log(`🏥 Health check: ${apiInfo.healthCheck}`);
-  console.log(`🧪 Test endpoints: ${apiInfo.testEndpoints}`);
+  // Log feature activation
+  logger.info('Enhanced logging features activated', {
+    category: 'startup',
+    features: {
+      correlationIds: true,
+      structuredLogging: true,
+      securityMonitoring: true,
+      performanceTracking: true,
+      fileRotation: true,
+      lokiIntegration: false
+    }
+  });
+
+  // Console output for immediate feedback
+  console.log('🎉 Enhanced Express.js Backend Started!');
+  console.log(`🚀 Port: ${PORT}`);
+  console.log(`📱 API: ${apiInfo.apiUrl}`);
+  console.log(`🏥 Health: ${apiInfo.healthCheck}`);
   console.log(`🌍 Environment: ${apiInfo.environment}`);
   console.log(`📝 Log Level: ${apiInfo.logLevel}`);
-  console.log(`📁 Logs Directory: ./logs/`);
+  console.log(`📁 Logs: ./logs/ (with daily rotation)`);
+  console.log('✨ NEW FEATURES:');
+  console.log('   🔗 Correlation tracking for all requests');
+  console.log('   📊 Structured JSON logging');
+  console.log('   🛡️  Enhanced security monitoring');
+  console.log('   ⚡ Performance tracking');
+  console.log('   🔄 Daily log rotation');
+  console.log('   📡 Loki integration disabled');
 });
 
 export default app; 
