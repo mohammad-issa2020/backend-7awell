@@ -47,7 +47,8 @@ class AuthController {
         'Session refreshed successfully'
       );
     } catch (error) {
-      logger.logError('Session refresh failed', error, {
+      logger.logError(error, {
+        message: 'Session refresh failed',
         ip: req.ip,
         userAgent: req.get('User-Agent'),
         endpoint: '/refresh-session'
@@ -211,7 +212,8 @@ class AuthController {
         );
       }
     } catch (error) {
-      logger.logError('Logout failed', error, {
+      logger.logError(error, {
+        message: 'Logout failed',
         userId: req.user?.id,
         ip: req.ip,
         userAgent: req.get('User-Agent'),
@@ -303,7 +305,8 @@ class AuthController {
         'OTP sent to phone number'
       );
     } catch (error) {
-      logger.logError('Phone login start failed', error, {
+      logger.logError(error, {
+        message: 'Phone login start failed',
         phoneNumber: req.body.phoneNumber ? `***${req.body.phoneNumber.slice(-4)}` : 'undefined',
         ip: req.ip,
         userAgent: req.get('User-Agent'),
@@ -416,7 +419,8 @@ class AuthController {
         'OTP sent to email successfully'
       );
     } catch (error) {
-      logger.logError('Email login start failed', error, {
+      logger.logError(error, {
+        message: 'Email login start failed',
         sessionId: req.body.sessionId,
         email: req.body.email ? `***${req.body.email.split('@')[1]}` : 'undefined',
         ip: req.ip,
@@ -530,7 +534,8 @@ class AuthController {
         'Login completed successfully'
       );
     } catch (error) {
-      logger.logError('Login completion failed', error, {
+      logger.logError(error, {
+        message: 'Login completion failed',
         sessionId: req.body.sessionId,
         ip: req.ip,
         userAgent: req.get('User-Agent'),

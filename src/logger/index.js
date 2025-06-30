@@ -1,6 +1,19 @@
 import winston from 'winston';
 import { getTransports } from './transports.js';
-import { getTrace, getCorrelationId, getCurrentUserId } from './correlation.js';
+import { 
+  getTrace, 
+  getCorrelationId, 
+  getCurrentUserId,
+  getCurrentUserPhone,
+  getCurrentPhoneIdentifier,
+  getCurrentUserIdentifier,
+  setUserPhone,
+  setUserId,
+  setComponent,
+  setOperation,
+  getUserContext,
+  isUserIdentified
+} from './correlation.js';
 
 // create custom levels
 const customLevels = {
@@ -26,26 +39,37 @@ const customLevels = {
 winston.addColors(customLevels.colors);
 
 /**
- * basic format for logs with correlation ID
+ * Enhanced format for logs with comprehensive context and secure phone tracking
  */
 const baseFormat = winston.format.printf(({ level, message, timestamp, ...meta }) => {
   const trace = getTrace();
+  const userContext = getUserContext();
   
   return JSON.stringify({
     timestamp,
     level,
     message,
+    
+    // Request tracking
     correlationId: trace?.correlationId || 'no-correlation',
-    userId: trace?.userId || null,
     requestDuration: trace ? Date.now() - trace.startTime : null,
-    ...meta,
-    // additional context information
-    ...(trace && {
-      ip: trace.ip,
-      userAgent: trace.userAgent,
-      method: trace.method,
-      url: trace.url
-    })
+    
+    // Enhanced user identification with secure phone tracking
+    ...userContext,
+    
+    // Request context
+    ip: trace?.ip,
+    userAgent: trace?.userAgent,
+    method: trace?.method,
+    url: trace?.url,
+    
+    // Component/operation tracking for debugging
+    component: trace?.component || meta.component || null,
+    feature: trace?.feature || meta.feature || null,
+    operation: trace?.operation || meta.operation || null,
+    
+    // Include all other metadata
+    ...meta
   });
 });
 
@@ -80,7 +104,7 @@ export const backendLogger = winston.createLogger({
 });
 
 /**
- * Enhanced logger with enhanced methods
+ * Enhanced logger with secure phone-based tracking and bug debugging features
  */
 class EnhancedLogger {
   constructor(baseLogger) {
@@ -112,73 +136,96 @@ class EnhancedLogger {
     this.logger.trace(message, this._enhanceMeta(meta));
   }
 
-  // enhanced logging methods
+  // Enhanced logging methods for specific use cases
   
   /**
-   * log user actions
+   * Log user actions with secure phone-based tracking support
    */
-  logUserAction(action, details = {}, userId = null) {
+  logUserAction(action, details = {}, userId = null, userPhone = null) {
+    // Update tracking if user info provided
+    if (userId) setUserId(userId);
+    if (userPhone) setUserPhone(userPhone);
+    
     const trace = getTrace();
     this.info(`User Action: ${action}`, {
       category: 'user_action',
-      userId: userId || trace?.userId,
+      action,
       ...details,
-      duration: trace ? Date.now() - trace.startTime : null
+      duration: trace ? Date.now() - trace.startTime : null,
+      isUserIdentified: isUserIdentified()
     });
   }
 
   /**
-   * log authentication operations
+   * Enhanced authentication logging with secure phone support
    */
-  logAuth(action, success = true, details = {}, userId = null) {
+  logAuth(action, success = true, details = {}, userId = null, userPhone = null) {
     const level = success ? 'info' : 'warn';
-    const trace = getTrace();
+    
+    // Update tracking
+    if (userId) setUserId(userId);
+    if (userPhone) setUserPhone(userPhone);
+    
+    setComponent('auth', action);
     
     this[level](`Auth: ${action}`, {
       category: 'authentication',
+      action,
       success,
-      userId: userId || trace?.userId,
-      ip: trace?.ip,
-      userAgent: trace?.userAgent,
-      ...details
+      severity: success ? 'low' : 'medium',
+      ...details,
+      isUserIdentified: isUserIdentified()
     });
   }
 
   /**
-   * log transactions
+   * Log transactions with comprehensive tracking
    */
-  logTransaction(action, details = {}, userId = null) {
-    const trace = getTrace();
+  logTransaction(action, details = {}, userId = null, userPhone = null) {
+    if (userId) setUserId(userId);
+    if (userPhone) setUserPhone(userPhone);
+    
+    setComponent('transaction', action);
+    
     this.info(`Transaction: ${action}`, {
       category: 'transaction',
-      userId: userId || trace?.userId,
-      ...details
+      action,
+      ...details,
+      isUserIdentified: isUserIdentified()
     });
   }
 
   /**
-   * log security events
+   * Enhanced security event logging
    */
-  logSecurity(action, severity = 'medium', details = {}, userId = null) {
+  logSecurity(action, severity = 'medium', details = {}, userId = null, userPhone = null) {
     const level = severity === 'high' || severity === 'critical' ? 'error' : 'warn';
-    const trace = getTrace();
+    
+    if (userId) setUserId(userId);
+    if (userPhone) setUserPhone(userPhone);
+    
+    setComponent('security', action);
     
     this[level](`Security: ${action}`, {
       category: 'security',
+      action,
       severity,
-      userId: userId || trace?.userId,
-      ip: trace?.ip,
-      userAgent: trace?.userAgent,
-      ...details
+      ...details,
+      isUserIdentified: isUserIdentified(),
+      requiresAttention: severity === 'high' || severity === 'critical'
     });
   }
 
   /**
-   * log API requests
+   * Enhanced API request logging
    */
-  logApiRequest(method, path, statusCode, duration, userId = null) {
+  logApiRequest(method, path, statusCode, duration, userId = null, userPhone = null) {
     const level = statusCode >= 400 ? (statusCode >= 500 ? 'error' : 'warn') : 'http';
-    const trace = getTrace();
+    
+    if (userId) setUserId(userId);
+    if (userPhone) setUserPhone(userPhone);
+    
+    setComponent('api', `${method}-${path}`);
     
     this[level](`${method} ${path} - ${statusCode} (${duration}ms)`, {
       category: 'api',
@@ -186,78 +233,212 @@ class EnhancedLogger {
       path,
       statusCode,
       duration,
-      userId: userId || trace?.userId,
-      ip: trace?.ip,
-      userAgent: trace?.userAgent
+      isError: statusCode >= 400,
+      isServerError: statusCode >= 500,
+      isUserIdentified: isUserIdentified()
     });
   }
 
   /**
-   * log errors with stack trace
+   * Enhanced error logging with stack trace and context
    */
-  logError(error, context = {}, userId = null) {
-    const trace = getTrace();
+  logError(error, context = {}, userId = null, userPhone = null) {
+    if (userId) setUserId(userId);
+    if (userPhone) setUserPhone(userPhone);
+    
+    setComponent(context.component || 'unknown', context.feature);
+    
     this.error(`Error: ${error.message}`, {
       category: 'error',
-      error: error.message,
+      errorName: error.name,
+      errorMessage: error.message,
       stack: error.stack,
-      userId: userId || trace?.userId,
-      ...context
+      severity: 'high',
+      ...context,
+      isUserIdentified: isUserIdentified(),
+      requiresAttention: true
     });
   }
 
   /**
-   * log performance
+   * Enhanced phone operation logging with secure identifier
+   * For non-signed-in users - now uses secure hash instead of last 4 digits
    */
-  logPerformance(action, duration, details = {}, userId = null) {
-    const level = duration > 5000 ? 'warn' : 'info';
-    const trace = getTrace();
+  logPhoneOperation(operation, phone, details = {}) {
+    setUserPhone(phone);
+    setComponent('phone-ops', operation);
     
+    const phoneIdentifier = getCurrentPhoneIdentifier();
+    
+    this.info(`Phone Operation: ${operation}`, {
+      category: 'phone_operation',
+      operation,
+      phoneIdentifier: phoneIdentifier, // Secure hash identifier
+      ...details,
+      isUserIdentified: isUserIdentified(),
+      phoneTrackingSecure: true // Indicates this uses secure tracking
+    });
+  }
+
+  /**
+   * Log business process steps for debugging complex flows
+   */
+  logBusinessProcess(process, step, success = true, details = {}, userId = null, userPhone = null) {
+    if (userId) setUserId(userId);
+    if (userPhone) setUserPhone(userPhone);
+    
+    setOperation(process, { step, success, ...details });
+    setComponent('business', process);
+    
+    const level = success ? 'info' : 'warn';
+    this[level](`Business Process: ${process} - ${step}`, {
+      category: 'business_process',
+      process,
+      step,
+      success,
+      ...details,
+      isUserIdentified: isUserIdentified()
+    });
+  }
+
+  /**
+   * Log performance metrics for debugging
+   */
+  logPerformance(action, duration, details = {}, userId = null, userPhone = null) {
+    if (userId) setUserId(userId);
+    if (userPhone) setUserPhone(userPhone);
+    
+    setComponent('performance', action);
+    
+    const level = duration > 5000 ? 'warn' : (duration > 2000 ? 'info' : 'debug');
     this[level](`Performance: ${action} took ${duration}ms`, {
       category: 'performance',
       action,
       duration,
-      userId: userId || trace?.userId,
-      ...details
+      isSlow: duration > 2000,
+      isVerySlow: duration > 5000,
+      ...details,
+      isUserIdentified: isUserIdentified()
     });
   }
 
   /**
-   * log database operations
+   * Enhanced database operation logging
    */
-  logDatabase(operation, table, success = true, details = {}, userId = null) {
-    const level = success ? 'debug' : 'error';
-    const trace = getTrace();
+  logDatabase(operation, table, success = true, details = {}, userId = null, userPhone = null) {
+    if (userId) setUserId(userId);
+    if (userPhone) setUserPhone(userPhone);
     
-    this[level](`DB: ${operation} on ${table}`, {
+    setComponent('database', operation);
+    
+    const level = success ? 'debug' : 'error';
+    this[level](`Database ${operation} on ${table}`, {
       category: 'database',
       operation,
       table,
       success,
-      userId: userId || trace?.userId,
-      ...details
+      severity: success ? 'low' : 'high',
+      ...details,
+      isUserIdentified: isUserIdentified()
     });
   }
 
   /**
-   * enhance metadata with context information
+   * Log external API calls
+   */
+  logExternalApi(service, operation, success = true, duration = null, details = {}) {
+    setComponent('external-api', service);
+    
+    const level = success ? 'info' : 'warn';
+    this[level](`External API: ${service} ${operation}`, {
+      category: 'external_api',
+      service,
+      operation,
+      success,
+      duration,
+      severity: success ? 'low' : 'medium',
+      ...details,
+      isUserIdentified: isUserIdentified()
+    });
+  }
+
+  /**
+   * Log validation errors for debugging
+   */
+  logValidationError(field, value, rule, details = {}) {
+    setComponent('validation', field);
+    
+    this.warn(`Validation Error: ${field} failed ${rule}`, {
+      category: 'validation',
+      field,
+      rule,
+      hasValue: !!value,
+      valueType: typeof value,
+      ...details,
+      isUserIdentified: isUserIdentified()
+    });
+  }
+
+  /**
+   * Log feature usage for analytics and debugging
+   */
+  logFeatureUsage(feature, action, details = {}, userId = null, userPhone = null) {
+    if (userId) setUserId(userId);
+    if (userPhone) setUserPhone(userPhone);
+    
+    setComponent('feature', feature);
+    
+    this.info(`Feature Usage: ${feature} - ${action}`, {
+      category: 'feature_usage',
+      feature,
+      action,
+      ...details,
+      isUserIdentified: isUserIdentified()
+    });
+  }
+
+  /**
+   * Enhanced meta information with automatic context
    */
   _enhanceMeta(meta) {
     const trace = getTrace();
+    const userContext = getUserContext();
+    
     return {
-      ...meta,
-      correlationId: meta.correlationId || trace?.correlationId,
-      userId: meta.userId || trace?.userId,
-      timestamp: new Date().toISOString()
+      // Automatic context enhancement
+      timestamp: new Date().toISOString(),
+      ...userContext,
+      correlationId: trace?.correlationId,
+      component: trace?.component || meta.component,
+      feature: trace?.feature || meta.feature,
+      operation: trace?.operation || meta.operation,
+      
+      // Memory and performance
+      memoryUsage: process.memoryUsage(),
+      
+      // Original metadata
+      ...meta
     };
   }
 }
 
-// create enhanced instance of Logger
+// create enhanced logger instance
 export const logger = new EnhancedLogger(backendLogger);
 
-// export main logger for direct use
-export { backendLogger as rawLogger };
+// export correlation functions for convenience
+export {
+  getTrace,
+  getCorrelationId,
+  getCurrentUserId,
+  getCurrentUserPhone,
+  getCurrentPhoneIdentifier,
+  getCurrentUserIdentifier,
+  setUserPhone,
+  setUserId,
+  setComponent,
+  setOperation,
+  getUserContext,
+  isUserIdentified
+};
 
-// exporttass default
 export default logger; 

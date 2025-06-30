@@ -1,5 +1,6 @@
 import { supabase } from '../database/supabase.js';
 import logger from '../utils/logger.js';
+import notificationService from './notificationService.js';
 
 // Transaction types mapping - matching database enum
 const TRANSACTION_TYPES = {
@@ -577,6 +578,37 @@ class TransactionService {
         oldStatus: updateData.oldStatus,
         newStatus: status
       });
+
+      // Send notifications for completed or failed transactions
+      if (status === TRANSACTION_STATUS.COMPLETED || status === TRANSACTION_STATUS.FAILED) {
+        try {
+          const notificationStatus = status === TRANSACTION_STATUS.COMPLETED ? 'success' : 'failure';
+          
+          // Prepare transaction data for notification
+          const transactionData = {
+            transactionId: data.id,
+            type: data.type,
+            amount: data.amount,
+            assetSymbol: data.asset_symbol,
+            recipientAddress: data.to_address,
+            reference: data.reference,
+            createdAt: data.created_at,
+            failureReason: status === TRANSACTION_STATUS.FAILED ? 
+              (updateData.errorReason || updateData.error_reason || 'Transaction processing failed') : 
+              undefined
+          };
+
+          // Send notification asynchronously to avoid blocking the response
+          notificationService.sendTransactionNotification(userId, transactionData, notificationStatus)
+            .catch(error => {
+              logger.error(`❌ Failed to send notification for transaction ${transactionId}:`, error);
+            });
+
+          logger.info(`📬 Notification queued for transaction ${transactionId} with status ${notificationStatus}`);
+        } catch (error) {
+          logger.error(`❌ Error preparing notification for transaction ${transactionId}:`, error);
+        }
+      }
 
       return data;
 

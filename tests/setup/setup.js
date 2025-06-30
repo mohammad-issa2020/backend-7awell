@@ -67,20 +67,28 @@ vi.mock('../../services/solanaService', () => ({
   }
 }));
 
-
-
-// Mock Winston logger to avoid console spam during tests
-const mockLogger = {
-  info: vi.fn(),
-  error: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-  verbose: vi.fn()
-};
-
-// Mock logger globally
-vi.mock('../../utils/logger', () => ({
-  default: mockLogger
+// Mock logger for tests
+vi.mock('../../utils/logger.js', () => ({
+  default: {
+    logError: vi.fn(),
+    logAuth: vi.fn(),
+    logUserAction: vi.fn(),
+    logTransaction: vi.fn(),
+    logSecurity: vi.fn(),
+    logApiRequest: vi.fn(),
+    logPhoneOperation: vi.fn(),
+    logBusinessProcess: vi.fn(),
+    logPerformance: vi.fn(),
+    logDatabase: vi.fn(),
+    logExternalApi: vi.fn(),
+    logValidationError: vi.fn(),
+    logFeatureUsage: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    trace: vi.fn()
+  }
 }));
 
 // Global test setup
@@ -109,7 +117,6 @@ beforeEach(() => {
 
 // Global test utilities
 global.mockStytchClient = mockStytchClient;
-global.mockLogger = mockLogger;
 
 // Helper function to create mock user data
 global.createMockUser = (overrides = {}) => ({

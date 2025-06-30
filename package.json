@@ -25,7 +25,17 @@
     "db:seed": "npx sequelize-cli db:seed:all",
     "build": "node scripts/build.js",
     "solana:generate-wallet": "node scripts/generateSolanaWallet.js",
-    "solana:check-balance": "node scripts/checkSolanaBalance.js"
+    "solana:check-balance": "node scripts/checkSolanaBalance.js",
+    "solana:setup": "node scripts/setup-solana-test-env.js",
+    "solana:test": "node test-solana-integration.js",
+    "solana:test:unit": "vitest run tests/solana-full-integration.test.js",
+    "solana:test:watch": "vitest --watch tests/solana-full-integration.test.js",
+    "test:email": "node test-firebase-setup.js",
+    "test:firebase": "node test-firebase-setup.js",
+    "migrate": "node database/migrate.js",
+    "logs:test": "node test-enhanced-logging.js",
+    "logs:example": "node examples/enhanced-logging-usage.js",
+    "logs:betterstack": "node test-better-stack.js"
   },
   "keywords": [
     "express",
@@ -40,6 +50,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@logtail/node": "^0.5.5",
+    "@logtail/winston": "^0.5.5",
     "@solana/spl-token": "^0.4.13",
     "@solana/web3.js": "^1.98.2",
     "@supabase/supabase-js": "^2.50.0",
@@ -54,6 +66,7 @@
     "express-rate-limit": "^7.1.5",
     "express-validator": "^7.0.1",
     "express-winston": "^4.2.0",
+    "firebase-admin": "^13.4.0",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
